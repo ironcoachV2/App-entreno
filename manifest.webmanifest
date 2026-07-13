@@ -1,12 +1,12 @@
 {
-  "name": "IronCoach",
+  "name": "IronCoach — Atleta Completo",
   "short_name": "IronCoach",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#15171f",
   "theme_color": "#15171f",
-  "description": "Entrenador personal híbrido y seguimiento deportivo.",
+  "description": "Entrenamiento híbrido, salud, recuperación y rendimiento.",
   "icons": [
     {
       "src": "./icon.svg",

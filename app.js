@@ -147,6 +147,22 @@ const DB = {
     } catch(e) { return false; }
   },
 
+  KEY_DAILY_STATUS: 'ic_daily_status_v1',
+  loadDailyStatus() {
+    try { return JSON.parse(localStorage.getItem(this.KEY_DAILY_STATUS)||'[]'); }
+    catch(e) { return []; }
+  },
+  getDailyStatus(date) {
+    return this.loadDailyStatus().find(s=>s.date===date)||{date,status:'pending',updatedAt:null};
+  },
+  saveDailyStatus(entry) {
+    try {
+      const all=this.loadDailyStatus().filter(s=>s.date!==entry.date);
+      localStorage.setItem(this.KEY_DAILY_STATUS,JSON.stringify([...all,entry]));
+      return true;
+    } catch(e) { return false; }
+  },
+
   resetUser() {
     // Solo borra entradas del usuario, NUNCA los datos base
     localStorage.removeItem(this.KEY_LOGS);
@@ -889,6 +905,63 @@ function mkWeekBars(wks){
   wrap.appendChild(bars);return wrap;
 }
 
+
+// ═══ COMPLETE ATHLETE INDEX ════════════════════════════════════════
+function calcCompleteAthleteIndex(){
+  const logs=STATE.logs.slice(-14);
+  const recentDates=dRange(56);
+  const wks=STATE.wks.filter(w=>recentDates.includes(w.date));
+  const valid=a=>a.filter(v=>v!==null&&v!==undefined&&v>0);
+
+  const sleep=valid(logs.map(l=>l.sleep));
+  const fat=valid(logs.map(l=>l.fat));
+  const mus=valid(logs.map(l=>l.mus));
+  const mood=valid(logs.map(l=>l.mood));
+  const stress=valid(logs.map(l=>l.str));
+  const hrv=calcHRV(STATE.logs);
+
+  const sleepSc=cl((avg(sleep)/8)*100,0,100);
+  const fatSc=cl(100-((avg(fat||[3])-1)/9)*100,0,100);
+  const musSc=cl(100-((avg(mus||[3])-1)/9)*100,0,100);
+  const moodSc=cl((avg(mood||[7])/10)*100,0,100);
+  const stressSc=cl(100-((avg(stress||[3])-1)/9)*100,0,100);
+  const hrvSc=hrv.signal?cl(hrv.signal,0,100):60;
+  const recovery=r0(sleepSc*.25+hrvSc*.25+fatSc*.20+musSc*.10+moodSc*.10+stressSc*.10);
+
+  const aerobicMin=wks.filter(w=>ic(w.discipline)||ir(w.discipline)||isw(w.discipline)||/trail|montaña/i.test(w.discipline||''))
+    .reduce((a,w)=>a+(w.duration||0),0);
+  const strengthN=wks.filter(w=>/fuerza|calistenia|híbrido/i.test(w.discipline||'')).length;
+  const coreMobN=wks.filter(w=>/core|movilidad|estabilidad/i.test((w.comment||'')+' '+(w.discipline||''))).length;
+  const qualityN=wks.filter(w=>['Z3','Z4','Z5','Z6','Z7'].includes(w.zone)).length;
+  const longN=wks.filter(w=>(ic(w.discipline)&&w.duration>=120)||(ir(w.discipline)&&w.duration>=60)||(isw(w.discipline)&&w.duration>=30)).length;
+  const capacity=r0(
+    cl(aerobicMin/900*100,0,100)*.40+
+    cl(strengthN/8*100,0,100)*.25+
+    cl(coreMobN/6*100,0,100)*.10+
+    cl(qualityN/6*100,0,100)*.15+
+    cl(longN/4*100,0,100)*.10
+  );
+
+  const weeks={};
+  wks.forEach(w=>{const d=new Date(w.date+'T12:00:00');const monday=new Date(d);monday.setDate(d.getDate()-((d.getDay()+6)%7));const k=monday.toISOString().slice(0,10);weeks[k]=(weeks[k]||0)+1;});
+  const activeWeeks=Object.values(weeks).filter(n=>n>=2).length;
+  const planStatuses=DB.loadDailyStatus().filter(s=>recentDates.includes(s.date));
+  const completed=planStatuses.filter(s=>['done','modified','rest'].includes(s.status)).length;
+  const adherence=planStatuses.length?completed/planStatuses.length:0.65;
+  const consistency=r0(cl(activeWeeks/8*70+adherence*30,0,100));
+
+  const caps={
+    endurance:wks.some(w=>ic(w.discipline)||ir(w.discipline)||isw(w.discipline)||/trail|montaña/i.test(w.discipline||'')),
+    strength:strengthN>0,
+    mobility:coreMobN>0,
+    intensity:qualityN>0,
+    recovery:logs.length>=4
+  };
+  const balance=r0(Object.values(caps).filter(Boolean).length/5*100);
+  const total=r0(recovery*.30+capacity*.30+consistency*.20+balance*.20);
+  return {total,recovery,capacity,consistency,balance};
+}
+
 // ═══ PAGES ════════════════════════════════════════════════════════
 
 // ─── PANEL ────────────────────────────────────────────────────────
@@ -896,6 +969,36 @@ function renderPanel(comp){
   const{pmc,tl,hrv,wt,eft,rs,iri,ftpE,rec}=comp;
   const frag=document.createDocumentFragment();
   const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
+  const athlete=calcCompleteAthleteIndex();
+
+  // ── Índice de Atleta Completo ──
+  const athleteCard=mkCard(null,{background:`linear-gradient(145deg,${C.blue}14,${C.green}0d)`,border:`1px solid ${C.blue}44`});
+  const athleteTop=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'14px'}});
+  const athleteLeft=h('div',{style:{display:'flex',flexDirection:'column',gap:'5px'}});
+  athleteLeft.appendChild(mkLbl('Índice de Atleta Completo'));
+  const athleteNum=mkBig(athlete.total,'/100',athlete.total>=70?C.green:athlete.total>=50?C.amber:C.red,38);
+  athleteLeft.appendChild(athleteNum);
+  const athleteSub=h('span',{style:{fontSize:'11px',color:C.t1,lineHeight:'1.4'}});
+  athleteSub.textContent='Salud, capacidad general, consistencia y equilibrio';
+  athleteLeft.appendChild(athleteSub);
+  const logoMark=h('div',{style:{width:'74px',height:'74px',borderRadius:'22px',background:C.bg0,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:'0'}});
+  logoMark.innerHTML=`<svg viewBox="0 0 100 100" width="58" height="58"><circle cx="50" cy="50" r="40" fill="none" stroke="${C.blue}" stroke-width="7"/><path d="M22 55h15l8-22 11 38 8-16h14" fill="none" stroke="${C.green}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  athleteTop.appendChild(athleteLeft);athleteTop.appendChild(logoMark);athleteCard.appendChild(athleteTop);
+  const athleteGrid=h('div',{className:'grid2',style:{marginTop:'14px'}});
+  [
+    ['Salud',athlete.recovery,C.green],
+    ['Capacidad',athlete.capacity,C.blue],
+    ['Consistencia',athlete.consistency,C.purple],
+    ['Equilibrio',athlete.balance,C.cyan]
+  ].forEach(([label,value,col])=>{
+    const box=h('div',{className:'metric-mini'});
+    const row=h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:'5px'}});
+    const l=h('span',{style:{fontSize:'10px',color:C.t2}});l.textContent=label;
+    const v=h('span',{style:{fontSize:'12px',fontWeight:'800',color:col,fontFamily:'monospace'}});v.textContent=value;
+    row.appendChild(l);row.appendChild(v);box.appendChild(row);box.appendChild(mkBar(value,100,col,4));athleteGrid.appendChild(box);
+  });
+  athleteCard.appendChild(athleteGrid);
+  gap.appendChild(athleteCard);
 
   // ── Plan de hoy ──
   const todayIdx=(new Date().getDay()+6)%7;
@@ -921,6 +1024,39 @@ function renderPanel(comp){
       conflict.textContent=`Tu recuperación es moderada — si toca calidad, considera bajar intensidad a ${rec.zone||'Z2'}.`;
       planCard.appendChild(conflict);
     }
+    const dailyStatus=DB.getDailyStatus(today());
+    const statusLabels={pending:'Pendiente',done:'Completado',modified:'Modificado',skipped:'No realizado',rest:'Descanso'};
+    const statusColors={pending:C.t2,done:C.green,modified:C.amber,skipped:C.red,rest:C.blue};
+    const statusRow=h('div',{style:{marginTop:'12px',paddingTop:'10px',borderTop:`1px solid ${C.border}`,display:'flex',flexDirection:'column',gap:'8px'}});
+    const statusTop=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}});
+    const statusLbl=h('span',{style:{fontSize:'11px',color:C.t2}});statusLbl.textContent='Estado del entrenamiento';
+    statusTop.appendChild(statusLbl);statusTop.appendChild(mkPill(statusLabels[dailyStatus.status]||'Pendiente',statusColors[dailyStatus.status]||C.t2));
+    statusRow.appendChild(statusTop);
+    const actions=h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'6px'}});
+    [
+      ['done','✓ Realizado',C.green],
+      ['modified','↻ Modificado',C.amber],
+      ['skipped','✕ No realizado',C.red],
+      ['rest','○ Descanso',C.blue]
+    ].forEach(([status,label,col])=>{
+      const b=mkBtn(label,()=>{
+        DB.saveDailyStatus({date:today(),status,planned:todayPlan.disc||null,note:todayPlan.note||'',updatedAt:new Date().toISOString()});
+        renderApp();
+      },col,status!==dailyStatus.status);
+      b.style.padding='9px 6px';b.style.fontSize='11px';
+      actions.appendChild(b);
+    });
+    statusRow.appendChild(actions);
+    if(dailyStatus.status==='done'){
+      const msg=h('div',{style:{fontSize:'12px',fontWeight:'700',color:C.green,textAlign:'center'}});
+      msg.textContent='✅ Objetivo del día completado';
+      statusRow.appendChild(msg);
+    } else if(dailyStatus.status==='modified'){
+      const msg=h('div',{style:{fontSize:'12px',fontWeight:'700',color:C.amber,textAlign:'center'}});
+      msg.textContent='🔄 Entrenamiento adaptado manteniendo la continuidad';
+      statusRow.appendChild(msg);
+    }
+    planCard.appendChild(statusRow);
     gap.appendChild(planCard);
   }
 
@@ -953,7 +1089,7 @@ function renderPanel(comp){
   const iriGrid=h('div',{style:{display:'grid',gridTemplateColumns:'auto 1fr',gap:'14px',alignItems:'center'}});
   iriGrid.appendChild(mkIRIGauge(iri.tot));
   const iriRight=h('div',{style:{display:'flex',flexDirection:'column',gap:'8px'}});
-  iriRight.appendChild(mkLbl('Índice de Preparación 70.3'));
+  iriRight.appendChild(mkLbl('Preparación específica 70.3'));
   const iriCol=iri.tot>=70?C.green:iri.tot>=55?C.amber:C.red;
   iriRight.appendChild(mkBar(iri.tot,100,iriCol,8));
   const iriChips=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}});
@@ -2169,7 +2305,8 @@ function renderConfig(){
       userWks:JSON.parse(localStorage.getItem(DB.KEY_WKS)||'[]'),
       cfg:STATE.cfg,
       plan:DB.loadPlan(),
-      cfgHistory:DB.loadCfgHistory()
+      cfgHistory:DB.loadCfgHistory(),
+      dailyStatus:DB.loadDailyStatus()
     };
     const text=JSON.stringify(backup,null,2);
     const filename='ironcoach_backup_'+today()+'.json';
@@ -2234,6 +2371,9 @@ function renderConfig(){
         localStorage.setItem(DB.KEY_LOGS,JSON.stringify(Object.values(logMap)));
         localStorage.setItem(DB.KEY_WKS,JSON.stringify(Object.values(wkMap)));
         if(data.cfg)DB.saveCfg(data.cfg);
+        if(data.plan)DB.savePlan(data.plan);
+        if(Array.isArray(data.cfgHistory))localStorage.setItem(DB.KEY_CFG_HIST,JSON.stringify(data.cfgHistory));
+        if(Array.isArray(data.dailyStatus))localStorage.setItem(DB.KEY_DAILY_STATUS,JSON.stringify(data.dailyStatus));
         reloadData();renderApp();
         alert('Importación completada.');
       }catch(err){alert('Error al leer el archivo: '+err.message);}
@@ -2293,12 +2433,14 @@ function renderApp(){
   // Header
   const header=h('div',{className:'header'});
   const hLeft=h('div');
-  const logoRow=h('div',{style:{display:'flex',alignItems:'baseline'}});
-  const l1=h('span',{style:{fontSize:'24px',fontWeight:'900',color:C.t0,letterSpacing:'.04em',lineHeight:'1'}});l1.textContent='IRON';
-  const l2=h('span',{style:{fontSize:'24px',fontWeight:'900',color:C.blue,letterSpacing:'.04em',lineHeight:'1'}});l2.textContent='COACH';
-  const l3=h('span',{style:{fontSize:'11px',color:C.t2,fontFamily:'monospace',marginLeft:'6px'}});l3.textContent='70.3';
-  logoRow.appendChild(l1);logoRow.appendChild(l2);logoRow.appendChild(l3);
-  const sub=h('div',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace'}});sub.textContent=`${STATE.cfg.raceName} · ${days>0?days+'d':'¡Carrera!'}`;
+  const logoRow=h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}});
+  const mark=h('div',{style:{width:'32px',height:'32px',borderRadius:'10px',background:C.bg0,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center'}});
+  mark.innerHTML=`<svg viewBox="0 0 100 100" width="25" height="25"><circle cx="50" cy="50" r="39" fill="none" stroke="${C.blue}" stroke-width="8"/><path d="M20 55h17l8-23 11 39 8-17h16" fill="none" stroke="${C.green}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const word=h('div',{style:{display:'flex',alignItems:'baseline'}});
+  const l1=h('span',{style:{fontSize:'22px',fontWeight:'900',color:C.t0,letterSpacing:'.04em',lineHeight:'1'}});l1.textContent='IRON';
+  const l2=h('span',{style:{fontSize:'22px',fontWeight:'900',color:C.blue,letterSpacing:'.04em',lineHeight:'1'}});l2.textContent='COACH';
+  word.appendChild(l1);word.appendChild(l2);logoRow.appendChild(mark);logoRow.appendChild(word);
+  const sub=h('div',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace',marginTop:'2px'}});sub.textContent=STATE.cfg.raceName?`Atleta completo · ${STATE.cfg.raceName}`:'Desarrollar un atleta completo';
   hLeft.appendChild(logoRow);hLeft.appendChild(sub);
 
   const hRight=h('div',{style:{display:'flex',flexDirection:'column',gap:'4px',alignItems:'flex-end'}});
@@ -2310,9 +2452,10 @@ function renderApp(){
   dtRow.appendChild(dt);dtRow.appendChild(cfgBtn);
   const pills=h('div',{style:{display:'flex',gap:'5px'}});
   const rsCol=rs>=70?C.green:rs>=50?C.amber:rs!==null?C.red:C.t2;
-  const iriCol=iri.tot>=70?C.green:iri.tot>=55?C.amber:C.red;
+  const athleteHead=calcCompleteAthleteIndex();
+  const iacCol=athleteHead.total>=70?C.green:athleteHead.total>=50?C.amber:C.red;
   pills.appendChild(mkPill(`RS ${rs??'—'}`,rsCol));
-  pills.appendChild(mkPill(`IRI ${iri.tot}`,iriCol));
+  pills.appendChild(mkPill(`IAC ${athleteHead.total}`,iacCol));
   hRight.appendChild(dtRow);hRight.appendChild(pills);
   header.appendChild(hLeft);header.appendChild(hRight);
   app.appendChild(header);
