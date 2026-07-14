@@ -147,6 +147,45 @@ const DB = {
     } catch(e) { return false; }
   },
 
+  KEY_ATHLETE_CORE: 'ic_athlete_core_v1',
+  loadAthleteCore() {
+    const defaults={
+      birthDate:'',
+      height:'',
+      usualWeight:'',
+      experience:'intermedio',
+      weeklyHours:8,
+      availableDays:5,
+      injuries:'',
+      limitations:'',
+      equipment:'Bicicleta de carretera, rodillo, piscina y material de fuerza',
+      primaryPurpose:'Desarrollar un atleta completo',
+      secondaryGoals:'',
+      strengths:'',
+      weaknesses:'',
+      preferences:'',
+      manualCaps:{
+        strength:50,
+        mobility:50,
+        core:50,
+        endurance:50,
+        power:50,
+        technique:50
+      },
+      updatedAt:null
+    };
+    try {
+      const saved=JSON.parse(localStorage.getItem(this.KEY_ATHLETE_CORE)||'null');
+      return saved?{...defaults,...saved,manualCaps:{...defaults.manualCaps,...(saved.manualCaps||{})}}:defaults;
+    } catch(e) { return defaults; }
+  },
+  saveAthleteCore(core) {
+    try {
+      localStorage.setItem(this.KEY_ATHLETE_CORE,JSON.stringify({...core,updatedAt:new Date().toISOString()}));
+      return true;
+    } catch(e) { return false; }
+  },
+
   KEY_DAILY_STATUS: 'ic_daily_status_v1',
   loadDailyStatus() {
     try { return JSON.parse(localStorage.getItem(this.KEY_DAILY_STATUS)||'[]'); }
@@ -682,6 +721,7 @@ let STATE = {
   iriOpen: false,
   cfg: DB.loadCfg(),
   plan: DB.loadPlan(),
+  athleteCore: DB.loadAthleteCore(),
   logs: [],
   wks: [],
 };
@@ -691,6 +731,7 @@ function reloadData(){
   const rawWks = DB.loadWks();
   STATE.wks = rawWks.map(w=>({...w, tss: estTSS(w, STATE.cfg)}));
   STATE.plan = DB.loadPlan();
+  STATE.athleteCore = DB.loadAthleteCore();
 }
 reloadData();
 
@@ -961,6 +1002,63 @@ function calcCompleteAthleteIndex(){
   const total=r0(recovery*.30+capacity*.30+consistency*.20+balance*.20);
   return {total,recovery,capacity,consistency,balance};
 }
+
+
+function calcAthleteCoreProfile(){
+  const core=STATE.athleteCore;
+  const wks=STATE.wks.filter(w=>dRange(84).includes(w.date));
+  const logs=STATE.logs.filter(l=>dRange(30).includes(l.date));
+  const totalMin=wks.reduce((a,w)=>a+(w.duration||0),0);
+  const byDisc={};
+  wks.forEach(w=>{byDisc[w.discipline]=(byDisc[w.discipline]||0)+(w.duration||0);});
+
+  const strengthSessions=wks.filter(w=>/fuerza|calistenia|híbrido/i.test(w.discipline||''));
+  const mobilitySessions=wks.filter(w=>/movilidad|core|estabilidad/i.test(`${w.discipline||''} ${w.comment||''}`));
+  const aerobicSessions=wks.filter(w=>ic(w.discipline)||ir(w.discipline)||isw(w.discipline)||/trail|montaña/i.test(w.discipline||''));
+  const qualitySessions=wks.filter(w=>['Z3','Z4','Z5','Z6','Z7'].includes(w.zone));
+  const technicalSessions=wks.filter(w=>/natación|trial|técnica|calistenia/i.test(`${w.discipline||''} ${w.comment||''}`));
+
+  const autoCaps={
+    strength:r0(cl(strengthSessions.length/10*100,0,100)),
+    mobility:r0(cl(mobilitySessions.length/8*100,0,100)),
+    core:r0(cl(mobilitySessions.filter(w=>/core|estabilidad/i.test(`${w.discipline||''} ${w.comment||''}`)).length/6*100,0,100)),
+    endurance:r0(cl(aerobicSessions.reduce((a,w)=>a+(w.duration||0),0)/1500*100,0,100)),
+    power:r0(cl(qualitySessions.length/8*100,0,100)),
+    technique:r0(cl(technicalSessions.length/8*100,0,100))
+  };
+
+  const caps={};
+  Object.keys(autoCaps).forEach(k=>{
+    caps[k]=r0(autoCaps[k]*.65+(core.manualCaps?.[k]??50)*.35);
+  });
+
+  const ranked=Object.entries(caps).sort((a,b)=>b[1]-a[1]);
+  const strongest=ranked[0]||['—',0];
+  const weakest=ranked.at(-1)||['—',0];
+
+  const sleep=logs.filter(l=>l.sleep).map(l=>l.sleep);
+  const hrv=calcHRV(STATE.logs);
+  const recoveryBase=r0(
+    cl(avg(sleep)/8*45,0,45)+
+    cl((hrv.signal||90)/100*35,0,35)+
+    cl((1-(avg(logs.filter(l=>l.fat).map(l=>l.fat)||[3])-1)/9)*20,0,20)
+  );
+
+  const weeklyHours=core.weeklyHours||0;
+  const avgWeeklyHours=r1(totalMin/60/12);
+  const loadFit=weeklyHours?cl(r0((avgWeeklyHours/weeklyHours)*100),0,140):null;
+
+  return {caps,autoCaps,strongest,weakest,recoveryBase,avgWeeklyHours,loadFit,byDisc,totalMin};
+}
+
+const CAP_LABELS={
+  strength:'Fuerza',
+  mobility:'Movilidad',
+  core:'Core y estabilidad',
+  endurance:'Resistencia',
+  power:'Potencia / intensidad',
+  technique:'Técnica y coordinación'
+};
 
 // ═══ PAGES ════════════════════════════════════════════════════════
 
@@ -2245,6 +2343,110 @@ function renderPlan(){
   return frag;
 }
 
+
+function renderNucleo(){
+  const core={...STATE.athleteCore,manualCaps:{...STATE.athleteCore.manualCaps}};
+  const profile=calcAthleteCoreProfile();
+  const frag=document.createDocumentFragment();
+  const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
+
+  const summary=mkCard(null,{background:`linear-gradient(145deg,${C.blue}14,${C.purple}0c)`,border:`1px solid ${C.blue}44`});
+  const top=h('div',{style:{display:'flex',justifyContent:'space-between',gap:'12px',alignItems:'center'}});
+  const left=h('div');
+  left.appendChild(mkLbl('Núcleo del atleta'));
+  const title=h('div',{style:{fontSize:'21px',fontWeight:'900',marginTop:'4px'}});title.textContent=core.primaryPurpose||'Desarrollar un atleta completo';
+  left.appendChild(title);
+  const sub=h('div',{style:{fontSize:'12px',color:C.t1,lineHeight:'1.5',marginTop:'5px'}});
+  sub.textContent=`${core.experience==='principiante'?'Principiante':core.experience==='avanzado'?'Avanzado':'Intermedio'} · ${core.weeklyHours||'—'} h disponibles/sem · ${core.availableDays||'—'} días`;
+  left.appendChild(sub);
+  const badge=mkPill(profile.recoveryBase>=70?'Base sólida':profile.recoveryBase>=50?'En desarrollo':'Revisar base',profile.recoveryBase>=70?C.green:profile.recoveryBase>=50?C.amber:C.red);
+  top.appendChild(left);top.appendChild(badge);summary.appendChild(top);
+
+  const insights=h('div',{className:'grid2',style:{marginTop:'14px'}});
+  [
+    ['Fortaleza actual',CAP_LABELS[profile.strongest[0]]||'—',C.green],
+    ['Mayor margen',CAP_LABELS[profile.weakest[0]]||'—',C.amber],
+    ['Volumen medio',`${profile.avgWeeklyHours} h/sem`,C.blue],
+    ['Ajuste disponibilidad',profile.loadFit===null?'—':`${profile.loadFit}%`,profile.loadFit!==null&&profile.loadFit>115?C.red:C.cyan]
+  ].forEach(([l,v,col])=>{
+    const box=h('div',{className:'metric-mini'});
+    box.appendChild(mkLbl(l));
+    const val=h('div',{style:{fontSize:'14px',fontWeight:'800',color:col,marginTop:'5px'}});val.textContent=v;box.appendChild(val);
+    insights.appendChild(box);
+  });
+  summary.appendChild(insights);
+  gap.appendChild(summary);
+
+  const capCard=mkCard(null);
+  capCard.appendChild(mkLbl('Mapa de capacidades'));
+  const capList=h('div',{style:{display:'flex',flexDirection:'column',gap:'11px',marginTop:'12px'}});
+  Object.entries(profile.caps).forEach(([k,v])=>{
+    const row=h('div',{style:{display:'flex',flexDirection:'column',gap:'5px'}});
+    const rt=h('div',{style:{display:'flex',justifyContent:'space-between'}});
+    const l=h('span',{style:{fontSize:'12px',color:C.t1}});l.textContent=CAP_LABELS[k];
+    const val=h('span',{style:{fontSize:'12px',fontWeight:'800',fontFamily:'monospace',color:v>=70?C.green:v>=50?C.amber:C.red}});val.textContent=`${v}/100`;
+    rt.appendChild(l);rt.appendChild(val);row.appendChild(rt);row.appendChild(mkBar(v,100,v>=70?C.green:v>=50?C.amber:C.red,6));capList.appendChild(row);
+  });
+  capCard.appendChild(capList);
+  const capNote=h('div',{style:{fontSize:'10px',color:C.t2,lineHeight:'1.5',marginTop:'12px'}});
+  capNote.textContent='Cada capacidad combina tu autoevaluación (35%) con evidencias del historial reciente (65%). No es una prueba clínica ni un test máximo.';
+  capCard.appendChild(capNote);
+  gap.appendChild(capCard);
+
+  const identity=mkCard(null);
+  identity.appendChild(mkLbl('Identidad y contexto'));
+  const formWrap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px',marginTop:'12px'}});
+  const g1=h('div',{className:'grid2'});
+  const birth=mkInp('Fecha de nacimiento','date',core.birthDate,v=>core.birthDate=v);
+  const height=mkInp('Altura (cm)','number',core.height,v=>core.height=+v||'');
+  const usualWeight=mkInp('Peso habitual (kg)','number',core.usualWeight,v=>core.usualWeight=+v||'');
+  const exp=mkSel('Experiencia',core.experience,v=>core.experience=v,[{v:'principiante',l:'Principiante'},{v:'intermedio',l:'Intermedio'},{v:'avanzado',l:'Avanzado'}]);
+  [birth,height,usualWeight,exp].forEach(x=>g1.appendChild(x));
+  formWrap.appendChild(g1);
+
+  const g2=h('div',{className:'grid2'});
+  const hours=mkInp('Horas disponibles/sem','number',core.weeklyHours,v=>core.weeklyHours=+v||0);
+  const days=mkInp('Días disponibles/sem','number',core.availableDays,v=>core.availableDays=+v||0);
+  g2.appendChild(hours);g2.appendChild(days);formWrap.appendChild(g2);
+
+  function textAreaField(label,value,onChange,placeholder){
+    const wrap=h('div',{style:{display:'flex',flexDirection:'column',gap:'5px'}});
+    wrap.appendChild(mkLbl(label));
+    const ta=h('textarea',{className:'inp',rows:'2',placeholder:placeholder||''});
+    ta.value=value||'';ta.addEventListener('input',e=>onChange(e.target.value));wrap.appendChild(ta);return wrap;
+  }
+  formWrap.appendChild(textAreaField('Propósito principal',core.primaryPurpose,v=>core.primaryPurpose=v));
+  formWrap.appendChild(textAreaField('Objetivos secundarios',core.secondaryGoals,v=>core.secondaryGoals=v,'Ej: mejorar fuerza relativa, nadar mejor, mantener peso...'));
+  formWrap.appendChild(textAreaField('Material y recursos',core.equipment,v=>core.equipment=v));
+  formWrap.appendChild(textAreaField('Lesiones o antecedentes relevantes',core.injuries,v=>core.injuries=v));
+  formWrap.appendChild(textAreaField('Limitaciones actuales',core.limitations,v=>core.limitations=v));
+  formWrap.appendChild(textAreaField('Preferencias de entrenamiento',core.preferences,v=>core.preferences=v));
+  formWrap.appendChild(textAreaField('Fortalezas percibidas',core.strengths,v=>core.strengths=v));
+  formWrap.appendChild(textAreaField('Debilidades percibidas',core.weaknesses,v=>core.weaknesses=v));
+  identity.appendChild(formWrap);gap.appendChild(identity);
+
+  const selfCard=mkCard(null);
+  selfCard.appendChild(mkLbl('Autoevaluación de capacidades'));
+  const sliders=h('div',{style:{display:'flex',flexDirection:'column',gap:'14px',marginTop:'12px'}});
+  Object.keys(core.manualCaps).forEach(k=>{
+    sliders.appendChild(mkSld(CAP_LABELS[k],core.manualCaps[k],0,100,v=>core.manualCaps[k]=v,
+      k==='strength'?C.purple:k==='mobility'?C.cyan:k==='core'?C.amber:k==='endurance'?C.blue:k==='power'?C.red:C.green));
+  });
+  selfCard.appendChild(sliders);gap.appendChild(selfCard);
+
+  const save=mkBtn('Guardar núcleo del atleta',()=>{
+    DB.saveAthleteCore(core);
+    STATE.athleteCore=DB.loadAthleteCore();
+    save.textContent='✓ Núcleo actualizado';
+    save.style.background=`linear-gradient(135deg,${C.green},${C.green}cc)`;
+    setTimeout(()=>renderApp(),900);
+  },C.blue);
+  gap.appendChild(save);
+
+  frag.appendChild(gap);
+  return frag;
+}
+
 function renderConfig(){
   const form={...STATE.cfg};
   const frag=document.createDocumentFragment();
@@ -2306,7 +2508,8 @@ function renderConfig(){
       cfg:STATE.cfg,
       plan:DB.loadPlan(),
       cfgHistory:DB.loadCfgHistory(),
-      dailyStatus:DB.loadDailyStatus()
+      dailyStatus:DB.loadDailyStatus(),
+      athleteCore:DB.loadAthleteCore()
     };
     const text=JSON.stringify(backup,null,2);
     const filename='ironcoach_backup_'+today()+'.json';
@@ -2374,6 +2577,7 @@ function renderConfig(){
         if(data.plan)DB.savePlan(data.plan);
         if(Array.isArray(data.cfgHistory))localStorage.setItem(DB.KEY_CFG_HIST,JSON.stringify(data.cfgHistory));
         if(Array.isArray(data.dailyStatus))localStorage.setItem(DB.KEY_DAILY_STATUS,JSON.stringify(data.dailyStatus));
+        if(data.athleteCore)DB.saveAthleteCore(data.athleteCore);
         reloadData();renderApp();
         alert('Importación completada.');
       }catch(err){alert('Error al leer el archivo: '+err.message);}
@@ -2420,6 +2624,7 @@ const NAV_ITEMS=[
   {id:'progreso',icon:'🎯',lbl:'Objetivo'},
   {id:'analisis',icon:'∿',lbl:'Análisis'},
   {id:'zonas',icon:'◎',lbl:'Zonas'},
+  {id:'nucleo',icon:'◈',lbl:'Núcleo'},
 ];
 
 function renderApp(){
@@ -2486,6 +2691,7 @@ function renderApp(){
   else if(STATE.page==='progreso')pageContent=renderProgreso(comp);
   else if(STATE.page==='analisis')pageContent=renderAnalisis(comp);
   else if(STATE.page==='zonas')pageContent=renderZonas();
+  else if(STATE.page==='nucleo')pageContent=renderNucleo();
   else if(STATE.page==='cfg')pageContent=renderConfig();
   if(pageContent)content.appendChild(pageContent);
   content.scrollTop=0;
