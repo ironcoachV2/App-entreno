@@ -1,26 +1,22 @@
-# IronCoach v2.3.1 — Parser corregido
+# IronCoach v2.3.2 — Corrección de desnivel y RPE
 
 ## Correcciones
-- Reconoce fechas como:
-  - 13 julio 2026
-  - 13 de julio de 2026
-  - 13/07/2026
-  - 2026-07-13
-- Reconoce ALTITUD como desnivel/elevación.
-- Acepta unidades:
-  - 65 min
-  - 45 km
-  - 220 W
-  - 86 rpm
-  - 450 m
-- Acepta claves con espacios:
-  - POTENCIA MEDIA
-  - POTENCIA MAX
-  - FC MEDIA
-  - FC MAX
-- Acepta zonas como:
-  - 10 min
-  - x min
-  - 00:10:00
-- Reconoce disciplinas escritas en minúsculas, como `natacion`.
-- La plantilla visible usa ahora el formato real que emplearemos en conversación.
+- El RPE importado mueve ahora la barra y actualiza su valor visible.
+- El desnivel se mantiene aunque los campos dinámicos se reconstruyan al detectar la disciplina.
+- Se guarda el desnivel aunque el campo visual no exista en una disciplina.
+- Nuevos alias aceptados:
+  - ALTITUD
+  - ALTITUD POSITIVA
+  - DESNIVEL
+  - DESNIVEL POSITIVO
+  - ELEVACIÓN
+  - ELEVACIÓN POSITIVA
+  - ASCENSO
+  - ASCENSO TOTAL
+- La fecha acepta FECHA o DIA, aunque el valor diario actual sigue siendo el fallback.
+
+## Formato recomendado para desnivel
+`DESNIVEL=450 m`
+
+También se acepta:
+`ALTITUD=450 m`

@@ -1,4 +1,4 @@
-const CACHE='ironcoach-v2-3-1-parser';
+const CACHE='ironcoach-v2-3-2-parser';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));

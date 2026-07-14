@@ -721,7 +721,7 @@ function parseStructuredIronCoach(txt){
   };
   const num=v=>cleanNumeric(v);
   const out={
-    date:parseSpanishDate(get('FECHA','DATE')),
+    date:parseSpanishDate(get('FECHA','DIA','DATE')),
     discipline:get('DISCIPLINA','DEPORTE','SPORT'),
     sessionType:get('TIPO','TIPO_SESION','SESSION_TYPE'),
     duration:parseDurationFlexible(get('DURACION','DURACION_MIN','TIEMPO')),
@@ -733,7 +733,7 @@ function parseStructuredIronCoach(txt){
     hrAvg:num(get('FC','FC MEDIA','FC_MEDIA','HR_AVG')),
     hrMax:num(get('FC MAX','FC_MAX','FC_MAXIMA','HR_MAX')),
     cadence:num(get('CADENCIA','CADENCIA_MEDIA','CADENCE')),
-    elevation:num(get('DESNIVEL','ALTITUD','ELEVACION','ELEVATION')),
+    elevation:num(get('DESNIVEL','DESNIVEL POSITIVO','DESNIVEL_POSITIVO','ALTITUD','ALTITUD POSITIVA','ALTITUD_POSITIVA','ELEVACION','ELEVACION POSITIVA','ASCENSO','ASCENSO TOTAL','ELEVATION')),
     rpe:num(get('RPE','ESFUERZO')),
     paceAvgSec:parsePace(get('RITMO','RITMO_KM','PACE')),
     swimPaceSec:parsePace(get('RITMO_100M','SWIM_PACE','RITMO_NATACION')),
@@ -981,8 +981,11 @@ function mkSld(label,val,min,max,onChange,col){
   const den=h('span',{style:{fontSize:'10px',color:C.t2}});den.textContent=`/${max}`;
   num.appendChild(den);row.appendChild(num);
   wrap.appendChild(row);
-  const inp=h('input',{type:'range',min:String(min||1),max:String(max||10),value:String(val),style:{accentColor:col,background:C.border}});
+  const inp=h('input',{type:'range',min:String(min??1),max:String(max??10),value:String(val),style:{accentColor:col,background:C.border}});
+  inp.dataset.slider='true';
   inp.addEventListener('input',e=>{num.childNodes[0].textContent=e.target.value;onChange(+e.target.value);});
+  wrap._sliderInput=inp;
+  wrap._sliderNumber=num;
   wrap.appendChild(inp);
   const labels=h('div',{style:{display:'flex',justifyContent:'space-between'}});
   const l1=h('span',{style:{fontSize:'9px',color:C.t2}});l1.textContent=String(min||1);
@@ -1605,7 +1608,9 @@ function renderEntreno(){
         /carrera|running|trail|montaña/.test(discNorm)?'Carrera':
         /fuerza|calistenia/.test(discNorm)?'Fuerza':
         DISCS.includes(discRaw)?discRaw:'Otro';
-      form.discipline=known;discSel.querySelector('select').value=known;updateFields();
+      form.discipline=known;
+      discSel.querySelector('select').value=known;
+      updateFields();
     }
     if(parsed.zone){
       form.zone=parsed.zone;
@@ -1620,8 +1625,14 @@ function renderEntreno(){
     if(parsed.hrAvg!==undefined)setInpVal(hrAvgInp,parsed.hrAvg);
     if(parsed.hrMax!==undefined)setInpVal(hrMaxInp,parsed.hrMax);
     if(parsed.cadence!==undefined&&cadInp)setInpVal(cadInp,parsed.cadence);
-    if(parsed.elevation!==undefined&&elevInp)setInpVal(elevInp,parsed.elevation);
-    if(parsed.rpe!==undefined)form.rpe=parsed.rpe;
+    if(parsed.elevation!==undefined){
+      form.elevation=parsed.elevation;
+      if(elevInp)setInpVal(elevInp,parsed.elevation);
+    }
+    if(parsed.rpe!==undefined){
+      form.rpe=cl(+parsed.rpe,1,10);
+      setSliderVal(rpeRow,form.rpe);
+    }
     if(parsed.paceAvgSec!==undefined&&paceInp)setInpVal(paceInp,fmtPace(parsed.paceAvgSec));
     if(parsed.swimPaceSec!==undefined&&swimPaceInp)setInpVal(swimPaceInp,fmtPace(parsed.swimPaceSec));
     if(parsed.swolf!==undefined&&swolfInp)setInpVal(swolfInp,parsed.swolf);
@@ -1722,6 +1733,16 @@ function renderEntreno(){
     if(key)form[key]=val;
   }
 
+  function setSliderVal(wrap,val){
+    const inp=wrap?._sliderInput||wrap?.querySelector('input[type="range"]');
+    if(!inp)return;
+    inp.value=String(val);
+    if(wrap._sliderNumber && wrap._sliderNumber.childNodes[0]){
+      wrap._sliderNumber.childNodes[0].textContent=String(val);
+    }
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+
   function autoTSS(){
     const pnv=powNPInp?+(powNPInp.querySelector('input')?.value||0):0;
     const durv=+(durInp.querySelector('input')?.value||0);
@@ -1745,6 +1766,10 @@ function renderEntreno(){
       elevInp=mkInp('Desnivel (m)','number','',v=>form.elevation=v,'');
       [powAvgInp,powNPInp,cadInp,elevInp].forEach(i=>pg.appendChild(i));
       powSection.appendChild(pg);
+      if(form.powerAvg!==''&&form.powerAvg!==undefined)setInpVal(powAvgInp,form.powerAvg);
+      if(form.powerNorm!==''&&form.powerNorm!==undefined)setInpVal(powNPInp,form.powerNorm);
+      if(form.cadence!==''&&form.cadence!==undefined)setInpVal(cadInp,form.cadence);
+      if(form.elevation!==''&&form.elevation!==undefined)setInpVal(elevInp,form.elevation);
       zoneHint=h('div',{style:{fontSize:'12px',color:C.t2,fontFamily:'monospace',display:'none'}});
       powSection.appendChild(zoneHint);
       if(powAvgInp){powAvgInp.querySelector('input').addEventListener('input',e=>{
@@ -1761,6 +1786,9 @@ function renderEntreno(){
       elevInp=mkInp('Desnivel (m)','number','',v=>form.elevation=v,'');
       [paceInp,cadInp,elevInp].forEach(i=>pg.appendChild(i));
       powSection.appendChild(pg);
+      if(form.paceAvgSec)setInpVal(paceInp,fmtPace(form.paceAvgSec));
+      if(form.cadence!==''&&form.cadence!==undefined)setInpVal(cadInp,form.cadence);
+      if(form.elevation!==''&&form.elevation!==undefined)setInpVal(elevInp,form.elevation);
     } else if(isw(form.discipline)){
       powSection.appendChild(mkDivider());
       const pl=mkLbl('Natación');powSection.appendChild(pl);
@@ -1793,7 +1821,7 @@ function renderEntreno(){
       hrAvg:+(hrAvgInp.querySelector('input')?.value||0),
       hrMax:+(hrMaxInp.querySelector('input')?.value||0),
       cadence:cadInp?+(cadInp.querySelector('input')?.value||0):0,
-      elevation:elevInp?+(elevInp.querySelector('input')?.value||0):0,
+      elevation:elevInp?+(elevInp.querySelector('input')?.value||form.elevation||0):+(form.elevation||0),
       rpe:form.rpe,
       paceAvgSec:form.paceAvgSec||null,
       swimPaceSec:form.swimPaceSec||null,
