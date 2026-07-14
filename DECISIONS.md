@@ -1,57 +1,41 @@
-# IronCoach — Changelog
+# IronCoach — Registro de decisiones
 
-## Origen
-Archivo HTML único creado con Claude y usado desde Documents by Readdle.
+## D-001
+**Cambio:** Publicar como PWA.  
+**Motivo:** iOS limitaba el HTML local.
 
-## Rescate
-- Recuperación de 38 registros diarios.
-- Recuperación de 31 entrenamientos.
-- Confirmación de configuración y plan.
+## D-002
+**Cambio:** Conservar la interfaz de Claude.  
+**Motivo:** Ya tenía valor funcional y visual.
 
-## v2.0
-- Conversión a PWA.
-- GitHub Pages.
-- Instalación desde Safari.
-- Backup compatible con iPhone.
+## D-003
+**Cambio:** Atleta completo como filosofía central.  
+**Motivo:** Las competiciones son objetivos temporales.
 
-## v2.1
-- Logo.
-- Índice de Atleta Completo.
-- Check diario.
-- Preparación 70.3 secundaria.
+## D-004
+**Cambio:** Separar Núcleo y Estado.  
+**Motivo:** Diferenciar identidad estable y evolución dinámica.
 
-## v2.2
-- Núcleo del Atleta.
-- Disponibilidad, material, lesiones y autoevaluación.
+## D-005
+**Cambio:** Crear IRONCOACH_V1.  
+**Motivo:** Reducir errores del lenguaje natural.
 
-## v2.3
-- Importador IRONCOACH_V1.
-- Zonas automáticas.
-- Correcciones de fecha, desnivel y RPE.
+## D-006
+**Cambio:** Plan semanal multideporte.  
+**Motivo:** Admitir sesiones combinadas.
 
-## v2.4
-- Estado del Atleta.
-- Capacidades dinámicas.
-- Riesgos y recomendaciones.
-- Planning multideporte.
+## D-007
+**Cambio:** Cinco áreas principales.  
+**Motivo:** Reducir ruido.
 
-## v2.5
-- Navegación reducida a cinco áreas.
-- Persistencia del estado.
+## D-008
+**Cambio:** El Índice deja de liderar Inicio.  
+**Motivo:** No decide el entrenamiento del día.
 
-## v2.6
-- Historial separado.
-- Estadísticas.
-- Objetivos con fecha.
-- Accesos rápidos.
+## D-009
+**Cambio:** Añadir CTL/ATL/TSB, Momentum y Consistencia.  
+**Motivo:** Separar disponibilidad, carga, tendencia y desarrollo global.
 
-## v2.7
-- Dashboard UX.
-- Recovery.
-- CTL/ATL/TSB.
-- Momentum.
-- Consistencia.
-- Índice explicado.
-
-## Etapa actual
-Milestone 1 — Base estable.
+## D-010
+**Cambio:** Feature freeze.  
+**Motivo:** Consolidar antes de ampliar.

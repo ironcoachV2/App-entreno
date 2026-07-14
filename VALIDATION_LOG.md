@@ -1,41 +1,48 @@
-# IronCoach — Algorithm Bible
+# IronCoach — Registro de validación
 
-## Recovery
-**Estado:** En ajuste  
-Combina sueño, HRV, fatiga y estrés.
+## Plantilla
 
-## CTL
-**Estado:** Experimental  
-Promedio exponencial aproximado de 42 días.
+**Fecha:**  
+**Versión:**  
+**Dispositivo:**  
+**Flujo probado:**  
 
-## ATL
-**Estado:** Experimental  
-Promedio exponencial aproximado de 7 días.
+### Funcionó bien
+-
 
-## TSB
-**Estado:** Experimental  
-CTL - ATL.
+### Error o fricción
+-
 
-## Momentum
-**Estado:** Experimental  
-Combina tendencia de capacidades, variación de CTL, consistencia y fatiga.
+### Métrica poco creíble
+-
 
-## Consistencia
-**Estado:** En ajuste  
-Combina días activos y cumplimiento del plan.
+### Algo que sobraba
+-
 
-## Índice de Atleta Completo
-**Estado:** En ajuste  
-Combina salud, capacidad general, consistencia y equilibrio.
+### Algo que faltaba
+-
 
-## Capacidades dinámicas
-- Resistencia.
-- Fuerza.
-- Core.
-- Movilidad.
-- Potencia.
-- Técnica.
+### Acción
+- [ ] Sin cambios
+- [ ] Corregir bug
+- [ ] Ajustar UX
+- [ ] Calibrar algoritmo
+- [ ] Añadir al backlog
 
-## Recomendación diaria
-**Estado:** Experimental  
-Prioriza recuperación, riesgo de sobrecarga y capacidad más débil.
+## Validaciones v2.7
+
+- [ ] Estadísticas visibles.
+- [ ] Historial completo.
+- [ ] Parser: ciclismo.
+- [ ] Parser: carrera.
+- [ ] Parser: natación.
+- [ ] Parser: fuerza.
+- [ ] Desnivel automático.
+- [ ] RPE automático.
+- [ ] Recovery coherente.
+- [ ] CTL/ATL/TSB gradual.
+- [ ] Momentum estable.
+- [ ] Consistencia útil.
+- [ ] Recomendación coherente.
+- [ ] Backup completo.
+- [ ] Restauración completa.

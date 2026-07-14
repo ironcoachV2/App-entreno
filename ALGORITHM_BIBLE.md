@@ -1,41 +1,41 @@
-# IronCoach — Registro de decisiones
+# IronCoach — Algorithm Bible
 
-## D-001
-**Cambio:** Publicar como PWA.  
-**Motivo:** iOS limitaba el HTML local.
+## Recovery
+**Estado:** En ajuste  
+Combina sueño, HRV, fatiga y estrés.
 
-## D-002
-**Cambio:** Conservar la interfaz de Claude.  
-**Motivo:** Ya tenía valor funcional y visual.
+## CTL
+**Estado:** Experimental  
+Promedio exponencial aproximado de 42 días.
 
-## D-003
-**Cambio:** Atleta completo como filosofía central.  
-**Motivo:** Las competiciones son objetivos temporales.
+## ATL
+**Estado:** Experimental  
+Promedio exponencial aproximado de 7 días.
 
-## D-004
-**Cambio:** Separar Núcleo y Estado.  
-**Motivo:** Diferenciar identidad estable y evolución dinámica.
+## TSB
+**Estado:** Experimental  
+CTL - ATL.
 
-## D-005
-**Cambio:** Crear IRONCOACH_V1.  
-**Motivo:** Reducir errores del lenguaje natural.
+## Momentum
+**Estado:** Experimental  
+Combina tendencia de capacidades, variación de CTL, consistencia y fatiga.
 
-## D-006
-**Cambio:** Plan semanal multideporte.  
-**Motivo:** Admitir sesiones combinadas.
+## Consistencia
+**Estado:** En ajuste  
+Combina días activos y cumplimiento del plan.
 
-## D-007
-**Cambio:** Cinco áreas principales.  
-**Motivo:** Reducir ruido.
+## Índice de Atleta Completo
+**Estado:** En ajuste  
+Combina salud, capacidad general, consistencia y equilibrio.
 
-## D-008
-**Cambio:** El Índice deja de liderar Inicio.  
-**Motivo:** No decide el entrenamiento del día.
+## Capacidades dinámicas
+- Resistencia.
+- Fuerza.
+- Core.
+- Movilidad.
+- Potencia.
+- Técnica.
 
-## D-009
-**Cambio:** Añadir CTL/ATL/TSB, Momentum y Consistencia.  
-**Motivo:** Separar disponibilidad, carga, tendencia y desarrollo global.
-
-## D-010
-**Cambio:** Feature freeze.  
-**Motivo:** Consolidar antes de ampliar.
+## Recomendación diaria
+**Estado:** Experimental  
+Prioriza recuperación, riesgo de sobrecarga y capacidad más débil.
