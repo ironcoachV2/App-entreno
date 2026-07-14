@@ -147,6 +147,20 @@ const DB = {
     } catch(e) { return false; }
   },
 
+  KEY_ATHLETE_STATE: 'ic_athlete_state_v1',
+  loadAthleteStateHistory() {
+    try { return JSON.parse(localStorage.getItem(this.KEY_ATHLETE_STATE)||'[]'); }
+    catch(e) { return []; }
+  },
+  saveAthleteStateSnapshot(snapshot) {
+    try {
+      const all=this.loadAthleteStateHistory().filter(x=>x.date!==snapshot.date);
+      all.push(snapshot);all.sort((a,b)=>a.date.localeCompare(b.date));
+      localStorage.setItem(this.KEY_ATHLETE_STATE,JSON.stringify(all.slice(-365)));
+      return true;
+    } catch(e) { return false; }
+  },
+
   KEY_ATHLETE_CORE: 'ic_athlete_core_v1',
   loadAthleteCore() {
     const defaults={
@@ -1243,6 +1257,13 @@ function calcAthleteState(){
   const l28=STATE.wks.filter(w=>dRange(28).includes(w.date)).reduce((a,w)=>a+(w.tss||w.duration*.3||0),0);
   const acr=l28>0?l7/(l28/4):0,over=r0(cl((acr-.8)*75+(100-recovery)*.35,0,100)),fatigue=r0(cl((100-recovery)*.65+Math.max(0,acr-1)*35,0,100));
   const ranked=Object.entries(caps).sort((a,b)=>b[1]-a[1]);return{caps,trends,recovery,l7,l28,acr:r1(acr),over,fatigue,strongest:ranked[0],weakest:ranked.at(-1)};
+}
+function persistCurrentAthleteState(st){
+  DB.saveAthleteStateSnapshot({
+    date:today(),savedAt:new Date().toISOString(),recovery:st.recovery,
+    caps:st.caps,trends:st.trends,load7:st.l7,load28:st.l28,
+    acuteChronic:st.acr,fatigueRisk:st.fatigue,overloadRisk:st.over
+  });
 }
 function athleteRec(st){
   const weak=st.weakest?.[0]||'endurance';
@@ -2529,8 +2550,28 @@ function renderPlan(){
   card.appendChild(wrap);const save=mkBtn('Guardar plan semanal',()=>{DAY_KEYS.forEach(k=>plan[k]={discs:[...(plan[k].discs||[])],disc:(plan[k].discs||[])[0]||null,note:plan[k].note||''});DB.savePlan(plan);STATE.plan=DB.loadPlan();save.textContent='✓ Guardado'},C.blue);card.appendChild(h('div',{style:{height:'12px'}}));card.appendChild(save);gap.appendChild(card);frag.appendChild(gap);return frag;
 }
 
+
+function navAction(label,icon,page,color=C.blue,desc=''){
+  const b=h('button',{style:{width:'100%',textAlign:'left',border:`1px solid ${C.border}`,background:C.bg1,color:C.t0,borderRadius:'12px',padding:'13px',display:'flex',gap:'12px',alignItems:'center'}});
+  const ic=h('div',{style:{width:'38px',height:'38px',borderRadius:'11px',background:color+'18',color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'19px'}});ic.textContent=icon;
+  const tx=h('div'),t=h('div',{style:{fontSize:'13px',fontWeight:'800'}}),d=h('div',{style:{fontSize:'10px',color:C.t2,marginTop:'3px'}});t.textContent=label;d.textContent=desc;tx.appendChild(t);tx.appendChild(d);b.appendChild(ic);b.appendChild(tx);
+  b.onclick=()=>{STATE.page=page;renderApp();window.scrollTo(0,0)};return b;
+}
+function renderEntrenosHub(){
+  const f=document.createDocumentFragment(),g=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}}),c=mkCard(null),l=h('div',{style:{display:'flex',flexDirection:'column',gap:'9px'}});
+  c.appendChild(mkLbl('Entrenos'));l.appendChild(navAction('Añadir entrenamiento','＋','entreno',C.green,'Importador y registro manual'));l.appendChild(navAction('Historial','≡','historial',C.blue,'Consultar y editar sesiones'));l.appendChild(navAction('Estadísticas','▥','stats',C.purple,'Carga y distribución'));l.appendChild(navAction('Zonas','◎','zonas',C.amber,'Potencia, FC y ritmos'));c.appendChild(l);g.appendChild(c);f.appendChild(g);return f;
+}
+function renderEvolucionHub(){
+  const st=calcAthleteState();persistCurrentAthleteState(st);
+  const f=document.createDocumentFragment(),g=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}}),c=mkCard(null),l=h('div',{style:{display:'flex',flexDirection:'column',gap:'9px'}});
+  c.appendChild(mkLbl('Evolución'));l.appendChild(navAction('Estado del atleta','◇','estado',C.green,'Capacidades, carga, riesgos y recomendación'));l.appendChild(navAction('Progreso','↗','progreso',C.blue,'Tendencias de rendimiento'));l.appendChild(navAction('Análisis','◌','analisis',C.purple,'Lectura detallada'));c.appendChild(l);g.appendChild(c);f.appendChild(g);return f;
+}
+function renderMasHub(){
+  const f=document.createDocumentFragment(),g=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}}),c=mkCard(null),l=h('div',{style:{display:'flex',flexDirection:'column',gap:'9px'}});
+  c.appendChild(mkLbl('Más'));l.appendChild(navAction('Núcleo del atleta','◈','nucleo',C.purple,'Perfil y contexto estable'));l.appendChild(navAction('Registro diario','♥','diario',C.green,'Sueño, HRV, fatiga y peso'));l.appendChild(navAction('Ajustes y backup','⚙','cfg',C.blue,'Configuración y copias'));c.appendChild(l);g.appendChild(c);f.appendChild(g);return f;
+}
 function renderEstado(){
-  const st=calcAthleteState(),rec=athleteRec(st),frag=document.createDocumentFragment(),gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
+  const st=calcAthleteState();persistCurrentAthleteState(st);const rec=athleteRec(st),frag=document.createDocumentFragment(),gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
   const head=mkCard(null,{background:`linear-gradient(145deg,${C.green}10,${C.blue}10)`,border:`1px solid ${C.green}33`});head.appendChild(mkLbl('Estado del atleta'));
   const top=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'8px'}}),left=h('div');left.appendChild(mkBig(st.recovery,'/100',st.recovery>=70?C.green:st.recovery>=50?C.amber:C.red,42));
   const sub=h('div',{style:{fontSize:'11px',color:C.t1,marginTop:'4px'}});sub.textContent='Disponibilidad fisiológica';left.appendChild(sub);top.appendChild(left);top.appendChild(mkPill(st.recovery>=75?'Muy recuperado':st.recovery>=55?'Disponible':'Recuperación baja',st.recovery>=75?C.green:st.recovery>=55?C.amber:C.red));head.appendChild(top);gap.appendChild(head);
@@ -2707,7 +2748,8 @@ function renderConfig(){
       plan:DB.loadPlan(),
       cfgHistory:DB.loadCfgHistory(),
       dailyStatus:DB.loadDailyStatus(),
-      athleteCore:DB.loadAthleteCore()
+      athleteCore:DB.loadAthleteCore(),
+      athleteStateHistory:DB.loadAthleteStateHistory()
     };
     const text=JSON.stringify(backup,null,2);
     const filename='ironcoach_backup_'+today()+'.json';
@@ -2776,6 +2818,7 @@ function renderConfig(){
         if(Array.isArray(data.cfgHistory))localStorage.setItem(DB.KEY_CFG_HIST,JSON.stringify(data.cfgHistory));
         if(Array.isArray(data.dailyStatus))localStorage.setItem(DB.KEY_DAILY_STATUS,JSON.stringify(data.dailyStatus));
         if(data.athleteCore)DB.saveAthleteCore(data.athleteCore);
+        if(Array.isArray(data.athleteStateHistory))localStorage.setItem(DB.KEY_ATHLETE_STATE,JSON.stringify(data.athleteStateHistory));
         reloadData();renderApp();
         alert('Importación completada.');
       }catch(err){alert('Error al leer el archivo: '+err.message);}
@@ -2815,15 +2858,11 @@ function renderConfig(){
 
 // ═══ MAIN RENDER ══════════════════════════════════════════════════
 const NAV_ITEMS=[
-  {id:'panel',icon:'◉',lbl:'Panel'},
-  {id:'plan',icon:'📅',lbl:'Plan'},
-  {id:'diario',icon:'⊕',lbl:'Diario'},
-  {id:'entreno',icon:'⚡',lbl:'Entreno'},
-  {id:'progreso',icon:'🎯',lbl:'Objetivo'},
-  {id:'analisis',icon:'∿',lbl:'Análisis'},
-  {id:'zonas',icon:'◎',lbl:'Zonas'},
-  {id:'estado',icon:'◇',lbl:'Estado'},
-  {id:'nucleo',icon:'◈',lbl:'Núcleo'},
+  {id:'panel',icon:'⌂',lbl:'Inicio'},
+  {id:'entrenosHub',icon:'⚡',lbl:'Entrenos'},
+  {id:'plan',icon:'▦',lbl:'Plan'},
+  {id:'evolucionHub',icon:'↗',lbl:'Evolución'},
+  {id:'masHub',icon:'•••',lbl:'Más'},
 ];
 
 function renderApp(){
@@ -2890,6 +2929,9 @@ function renderApp(){
   else if(STATE.page==='progreso')pageContent=renderProgreso(comp);
   else if(STATE.page==='analisis')pageContent=renderAnalisis(comp);
   else if(STATE.page==='zonas')pageContent=renderZonas();
+  else if(STATE.page==='entrenosHub')pageContent=renderEntrenosHub();
+  else if(STATE.page==='evolucionHub')pageContent=renderEvolucionHub();
+  else if(STATE.page==='masHub')pageContent=renderMasHub();
   else if(STATE.page==='estado')pageContent=renderEstado();
   else if(STATE.page==='nucleo')pageContent=renderNucleo();
   else if(STATE.page==='cfg')pageContent=renderConfig();

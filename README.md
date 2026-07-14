@@ -1,3 +1,9 @@
-# IronCoach v2.4
+# IronCoach v2.5
 
-Estado del atleta, motor de adaptación, riesgos, recomendaciones y planificación multideporte.
+## Cambios
+- Navegación inferior reducida a cinco pestañas.
+- Funciones secundarias agrupadas.
+- Instantánea diaria persistente del Estado del Atleta.
+- Historial de estado incluido en backup e importación.
+- Los entrenamientos anteriores alimentan el estado inicial.
+- Los nuevos entrenamientos actualizan automáticamente las métricas.
