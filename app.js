@@ -1314,7 +1314,36 @@ function renderPanel(comp){
  const lc=mkCard(null);lc.appendChild(mkLbl('Carga y forma'));const lg=h('div',{className:'grid3',style:{marginTop:'10px'}});[['CTL',load.ctl,'Fitness',C.blue],['ATL',load.atl,'Fatiga',C.amber],['TSB',load.tsb,'Forma',load.tsb>=0?C.green:C.red]].forEach(([a,b,c,d])=>{const q=h('div',{className:'metric-mini'});q.appendChild(mkLbl(a));const n=h('div',{style:{fontSize:'22px',fontWeight:'900',color:d,marginTop:'4px'}});n.textContent=b;q.appendChild(n);const sm=h('div',{style:{fontSize:'9px',color:C.t2}});sm.textContent=c;q.appendChild(sm);lg.appendChild(q)});lc.appendChild(lg);g.appendChild(lc);
  const tc=mkCard(null);tc.appendChild(mkLbl('Tendencia'));const tg=h('div',{className:'grid2',style:{marginTop:'10px'}});[['Momentum',mom.score,mom.label,mom.color],['Consistencia',con.score,con.active+' días activos',C.purple]].forEach(([a,b,c,d])=>{const q=h('div',{className:'metric-mini'});q.appendChild(mkLbl(a));const n=h('div',{style:{fontSize:'24px',fontWeight:'900',color:d,marginTop:'5px'}});n.textContent=b;q.appendChild(n);q.appendChild(mkBar(b,100,d,5));const sm=h('div',{style:{fontSize:'10px',color:C.t2,marginTop:'5px'}});sm.textContent=c;q.appendChild(sm);tg.appendChild(q)});tc.appendChild(tg);g.appendChild(tc);
  const re=mkCard(null,{background:C.purple+'10',border:`1px solid ${C.purple}33`});re.appendChild(mkLbl('Recomendación de hoy'));const rt=h('div',{style:{fontSize:'17px',fontWeight:'900',color:C.purple,marginTop:'7px'}});rt.textContent=rec.title;const rx=h('div',{style:{fontSize:'12px',color:C.t1,marginTop:'7px'}});rx.textContent=rec.text;re.appendChild(rt);re.appendChild(rx);g.appendChild(re);
- const pc=mkCard(null),ph=h('div',{style:{display:'flex',justifyContent:'space-between'}});ph.appendChild(mkLbl('Plan de hoy'));ph.appendChild(mkPill(sl[ds.status]||'Pendiente',sc[ds.status]||C.t2));pc.appendChild(ph);const pt=h('div',{style:{fontSize:'17px',fontWeight:'900',marginTop:'9px'}});pt.textContent=discs.length?discs.join(' + '):'Sin sesión planificada';pc.appendChild(pt);if(p.note){const n=h('div',{style:{fontSize:'11px',color:C.t2,marginTop:'5px'}});n.textContent=p.note;pc.appendChild(n)}g.appendChild(pc);
+ const pc=mkCard(null),ph=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}});ph.appendChild(mkLbl('Plan de hoy'));ph.appendChild(mkPill(sl[ds.status]||'Pendiente',sc[ds.status]||C.t2));pc.appendChild(ph);
+ const pt=h('div',{style:{fontSize:'17px',fontWeight:'900',marginTop:'9px'}});pt.textContent=discs.length?discs.join(' + '):'Sin sesión planificada';pc.appendChild(pt);
+ if(p.note){const n=h('div',{style:{fontSize:'11px',color:C.t2,marginTop:'5px',lineHeight:'1.4'}});n.textContent=p.note;pc.appendChild(n)}
+ const planActions=h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'6px',marginTop:'11px'}});
+ [['done','✓ Realizado',C.green],['modified','↻ Modificado',C.amber],['skipped','✕ No realizado',C.red],['rest','○ Descanso',C.blue]].forEach(([statusKey,label,color])=>{
+   const actionBtn=mkBtn(label,()=>{
+     DB.saveDailyStatus({
+       date:today(),
+       status:statusKey,
+       planned:discs,
+       note:p.note||'',
+       updatedAt:new Date().toISOString()
+     });
+     renderApp();
+   },color,statusKey!==ds.status);
+   actionBtn.style.padding='9px 5px';
+   actionBtn.style.fontSize='10px';
+   planActions.appendChild(actionBtn);
+ });
+ pc.appendChild(planActions);
+ if(ds.status==='done'){
+   const doneMsg=h('div',{style:{fontSize:'12px',fontWeight:'800',color:C.green,textAlign:'center',marginTop:'9px'}});
+   doneMsg.textContent='✅ Objetivo del día completado';
+   pc.appendChild(doneMsg);
+ }else if(ds.status==='modified'){
+   const modMsg=h('div',{style:{fontSize:'12px',fontWeight:'800',color:C.amber,textAlign:'center',marginTop:'9px'}});
+   modMsg.textContent='🔄 Sesión adaptada respecto al plan';
+   pc.appendChild(modMsg);
+ }
+ g.appendChild(pc);
  const qc=mkCard(null);qc.appendChild(mkLbl('Acciones rápidas'));const qg=h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginTop:'10px'}});[['♥ Registro diario','diario',C.green],['＋ Añadir entreno','entreno',C.blue]].forEach(([a,b,c])=>{const bt=mkBtn(a,()=>{STATE.page=b;renderApp();window.scrollTo(0,0)},c);qg.appendChild(bt)});qc.appendChild(qg);g.appendChild(qc);
  const ic=mkCard(null,{background:lvl.color+'0c',border:`1px solid ${lvl.color}30`}),ih=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}}),il=h('div');il.appendChild(mkLbl('Índice de Atleta Completo'));const nm=h('div',{style:{fontSize:'14px',fontWeight:'900',color:lvl.color,marginTop:'5px'}});nm.textContent=lvl.name;il.appendChild(nm);ih.appendChild(il);ih.appendChild(mkBig(idx.total,'/100',lvl.color,30));ic.appendChild(ih);const ix=h('div',{style:{fontSize:'11px',color:C.t2,marginTop:'8px'}});ix.textContent='Mide desarrollo global a medio plazo, no disponibilidad para entrenar hoy.';ic.appendChild(ix);const bt=mkBtn('Ver explicación',()=>{STATE.page='indice';renderApp();window.scrollTo(0,0)},lvl.color,true);bt.style.marginTop='10px';ic.appendChild(bt);g.appendChild(ic);
  f.appendChild(g);return f;
@@ -1842,7 +1871,7 @@ function renderStats(){
   const frag=document.createDocumentFragment();
   const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
   const wks=STATE.wks;
-  const recent=wks.filter(w=>dRange(28).includes(w.date));
+  const recent=wks.filter(w=>w&&w.date&&dRange(28).includes(w.date));
   const totalMin=recent.reduce((a,w)=>a+(+w.duration||0),0);
   const totalTss=recent.reduce((a,w)=>a+(+w.tss||0),0);
   const byDisc={};
@@ -1893,7 +1922,8 @@ function renderStats(){
   Object.entries(zones).forEach(([z,m])=>{
     const row=h('div',{style:{display:'grid',gridTemplateColumns:'30px 1fr 54px',gap:'8px',alignItems:'center'}});
     const zl=h('span',{style:{fontSize:'11px',fontWeight:'800'}});zl.textContent=z;
-    row.appendChild(zl);row.appendChild(mkBar(m,ztot,PZ_COL[z]||C.blue,6));
+    const zoneColors={Z1:C.t2,Z2:C.blue,Z3:C.green,Z4:C.amber,Z5:C.red,Z6:C.purple,Z7:C.cyan};
+    row.appendChild(zl);row.appendChild(mkBar(m,ztot,zoneColors[z]||C.blue,6));
     const zv=h('span',{style:{fontSize:'10px',color:C.t2,textAlign:'right',fontFamily:'monospace'}});zv.textContent=`${r0(m)}m`;row.appendChild(zv);zlist.appendChild(row);
   });
   zoneCard.appendChild(zlist);gap.appendChild(zoneCard);

@@ -1,4 +1,4 @@
-const CACHE='ironcoach-v2-7';
+const CACHE='ironcoach-v2-7-1-fixes';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));
