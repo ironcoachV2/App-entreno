@@ -645,8 +645,10 @@ function parseCardiacDrift(txt){
 
 function parseDurationFlexible(v){
   if(v===null||v===undefined)return null;
-  const s=String(v).trim();
+  const s=String(v).trim().toLowerCase();
   if(!s)return null;
+  const minMatch=s.match(/^(\d+(?:[\.,]\d+)?)\s*(?:min|mins|minuto|minutos)$/);
+  if(minMatch)return +minMatch[1].replace(',','.');
   if(/^\d+(\.\d+)?$/.test(s))return +s;
   const parts=s.split(':').map(Number);
   if(parts.some(n=>Number.isNaN(n)))return null;
@@ -656,8 +658,10 @@ function parseDurationFlexible(v){
 }
 function parseZoneValueToMinutes(v){
   if(v===null||v===undefined)return 0;
-  const s=String(v).trim();
-  if(!s)return 0;
+  const s=String(v).trim().toLowerCase();
+  if(!s||/^x\s*(?:min|lin)?$/.test(s))return 0;
+  const minMatch=s.match(/^(\d+(?:[\.,]\d+)?)\s*(?:min|mins|minuto|minutos|lin)$/);
+  if(minMatch)return +minMatch[1].replace(',','.');
   if(/^\d+(\.\d+)?$/.test(s))return +s;
   const parts=s.split(':').map(Number);
   if(parts.some(n=>Number.isNaN(n)))return 0;
@@ -669,6 +673,33 @@ function normalizeKey(k){
   return k.trim().toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/\s+/g,'_');
+}
+
+function parseSpanishDate(v){
+  if(!v)return null;
+  const s=String(v).trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[,\.]/g,' ')
+    .replace(/\s+/g,' ');
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  const months={
+    enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+    julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12
+  };
+  let m=s.match(/^(\d{1,2})\s+(?:de\s+)?([a-z]+)\s+(?:de\s+)?(\d{4})$/);
+  if(m&&months[m[2]]){
+    return `${m[3]}-${String(months[m[2]]).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`;
+  }
+  m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){
+    return `${m[3]}-${String(+m[2]).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`;
+  }
+  return null;
+}
+function cleanNumeric(v){
+  if(v===null||v===undefined||v==='')return null;
+  const m=String(v).replace(',','.').match(/-?\d+(?:\.\d+)?/);
+  return m?+m[0]:null;
 }
 function parseStructuredIronCoach(txt){
   const lines=txt.split(/\r?\n/);
@@ -688,25 +719,21 @@ function parseStructuredIronCoach(txt){
     }
     return null;
   };
-  const num=v=>{
-    if(v===null||v===undefined||v==='')return null;
-    const n=parseFloat(String(v).replace(',','.'));
-    return Number.isFinite(n)?n:null;
-  };
+  const num=v=>cleanNumeric(v);
   const out={
-    date:get('FECHA','DATE'),
+    date:parseSpanishDate(get('FECHA','DATE')),
     discipline:get('DISCIPLINA','DEPORTE','SPORT'),
     sessionType:get('TIPO','TIPO_SESION','SESSION_TYPE'),
     duration:parseDurationFlexible(get('DURACION','DURACION_MIN','TIEMPO')),
     distance:num(get('DISTANCIA','DISTANCIA_KM')),
     tss:num(get('TSS')),
-    powerAvg:num(get('POTENCIA','POTENCIA_MEDIA','POWER_AVG')),
+    powerAvg:num(get('POTENCIA','POTENCIA MEDIA','POTENCIA_MEDIA','POWER_AVG')),
     powerNorm:num(get('NP','POTENCIA_NP','POWER_NORM')),
-    powerMax:num(get('POTENCIA_MAX','POWER_MAX')),
-    hrAvg:num(get('FC','FC_MEDIA','HR_AVG')),
-    hrMax:num(get('FC_MAX','FC_MAXIMA','HR_MAX')),
+    powerMax:num(get('POTENCIA MAX','POTENCIA_MAX','POWER_MAX')),
+    hrAvg:num(get('FC','FC MEDIA','FC_MEDIA','HR_AVG')),
+    hrMax:num(get('FC MAX','FC_MAX','FC_MAXIMA','HR_MAX')),
     cadence:num(get('CADENCIA','CADENCIA_MEDIA','CADENCE')),
-    elevation:num(get('DESNIVEL','ELEVACION','ELEVATION')),
+    elevation:num(get('DESNIVEL','ALTITUD','ELEVACION','ELEVATION')),
     rpe:num(get('RPE','ESFUERZO')),
     paceAvgSec:parsePace(get('RITMO','RITMO_KM','PACE')),
     swimPaceSec:parsePace(get('RITMO_100M','SWIM_PACE','RITMO_NATACION')),
@@ -734,27 +761,27 @@ function parseStructuredIronCoach(txt){
 }
 function buildIronCoachTemplate(){
   return `FORMATO=IRONCOACH_V1
-FECHA=${today()}
-DISCIPLINA=Ciclismo
+FECHA=13 julio 2026
+DISCIPLINA=natacion
 TIPO=Resistencia
-DURACION=01:30:00
-DISTANCIA=45.0
+DURACION=65 min
+DISTANCIA=45 km
 TSS=75
-POTENCIA_MEDIA=220
-NP=235
-POTENCIA_MAX=650
-FC_MEDIA=138
-FC_MAX=165
-CADENCIA=86
-DESNIVEL=450
+POTENCIA MEDIA=220 W
+NP=235 W
+POTENCIA MAX=650 W
+FC MEDIA=138
+FC MAX=165
+CADENCIA=86 rpm
+ALTITUD=450 m
 RPE=6
-Z1=00:10:00
-Z2=01:00:00
-Z3=00:15:00
-Z4=00:05:00
-Z5=00:00:00
-Z6=00:00:00
-Z7=00:00:00
+Z1=10 min
+Z2=60 min
+Z3=15 min
+Z4=x min
+Z5=x min
+Z6=x min
+Z7=x min
 DERIVA_CARDIACA=
 RITMO_KM=
 RITMO_100M=
@@ -1568,9 +1595,16 @@ function renderEntreno(){
       const di=dateInp.querySelector('input');if(di)di.value=parsed.date;
     }
     if(parsed.discipline){
-      const known=DISCS.includes(parsed.discipline)?parsed.discipline:
-        /trail|montaña/i.test(parsed.discipline)?'Carrera':
-        /calistenia/i.test(parsed.discipline)?'Fuerza':'Otro';
+      const discRaw=String(parsed.discipline).trim();
+      const discNorm=discRaw.toLowerCase();
+      const known=
+        /nataci[oó]n/.test(discNorm)?'Natación':
+        /ciclismo indoor|rodillo/.test(discNorm)?'Ciclismo Indoor':
+        /ciclismo|bici/.test(discNorm)?'Ciclismo':
+        /carrera indoor|cinta/.test(discNorm)?'Carrera Indoor':
+        /carrera|running|trail|montaña/.test(discNorm)?'Carrera':
+        /fuerza|calistenia/.test(discNorm)?'Fuerza':
+        DISCS.includes(discRaw)?discRaw:'Otro';
       form.discipline=known;discSel.querySelector('select').value=known;updateFields();
     }
     if(parsed.zone){
