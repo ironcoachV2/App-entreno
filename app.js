@@ -1273,244 +1273,53 @@ function athleteRec(st){
   return{title:`Prioridad: ${STATE_LABELS[weak]}`,text:`El mayor retorno vendría de estimular ${STATE_LABELS[weak].toLowerCase()}.`,tags:m[weak]};
 }
 
+
+function calcLoadUX(){
+  const td=new Date(today()+'T12:00:00'),daily={};
+  STATE.wks.forEach(w=>{const l=(+w.tss||0)>0?+w.tss:(+w.duration||0)*(.18+(+w.rpe||5)*.035);daily[w.date]=(daily[w.date]||0)+l});
+  let ctl=0,atl=0,h=[];
+  for(let i=89;i>=0;i--){const d=new Date(td);d.setDate(d.getDate()-i);const k=d.toISOString().slice(0,10),l=daily[k]||0;ctl+=(l-ctl)/42;atl+=(l-atl)/7;h.push({ctl,atl,tsb:ctl-atl})}
+  const c=h.at(-1)||{ctl:0,atl:0,tsb:0},p=h.at(-8)||c;return{ctl:r1(c.ctl),atl:r1(c.atl),tsb:r1(c.tsb),delta:r1(c.ctl-p.ctl)};
+}
+function calcConsistencyUX(){
+  const dates=new Set(STATE.wks.map(w=>w.date));let active=0;
+  for(let i=0;i<28;i++){const d=new Date(today()+'T12:00:00');d.setDate(d.getDate()-i);if(dates.has(d.toISOString().slice(0,10)))active++}
+  const statuses=DB.loadDailyStatus().filter(s=>dRange(28).includes(s.date)),done=statuses.filter(s=>['done','modified','rest'].includes(s.status)).length;
+  const adherence=statuses.length?done/statuses.length:Math.min(1,active/16);return{active,score:r0(cl(active/20*65+adherence*35,0,100))};
+}
+function calcMomentumUX(){
+  const st=calcAthleteState(),load=calcLoadUX(),con=calcConsistencyUX(),trend=avg(Object.values(st.trends));
+  const raw=trend*2.2+load.delta*1.8+(con.score-60)*.12-Math.max(0,st.fatigue-55)*.08,score=r0(cl(50+raw,0,100));
+  return{score,label:score>=65?'Ascendente':score<42?'Descendente':'Estable',color:score>=65?C.green:score<42?C.red:C.amber};
+}
+function athleteLevelUX(i){if(i<40)return{name:'Base',color:C.red,next:40};if(i<55)return{name:'Activo',color:C.amber,next:55};if(i<70)return{name:'Multideportista',color:C.blue,next:70};if(i<85)return{name:'Atleta completo',color:C.green,next:85};return{name:'Rendimiento integral',color:C.purple,next:100}}
+function athleteStatusUX(st,l,m){if(st.recovery<42||st.fatigue>72)return{label:'FATIGADO',text:'Prioriza absorber la carga y recuperar.',color:C.red};if(l.tsb<-18)return{label:'CARGADO',text:'La carga acumulada está reduciendo temporalmente tu forma.',color:C.amber};if(m.score>=65&&st.recovery>=58)return{label:'PRODUCTIVO',text:'Estás acumulando adaptación con recuperación suficiente.',color:C.green};if(st.recovery>=72&&l.tsb>5)return{label:'PREPARADO',text:'Tienes margen para una sesión de calidad.',color:C.blue};return{label:'ESTABLE',text:'Puedes mantener el plan previsto.',color:C.amber}}
+function renderIndiceDetalle(){
+ const idx=calcCompleteAthleteIndex(),st=calcAthleteState(),lvl=athleteLevelUX(idx.total),f=document.createDocumentFragment(),g=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
+ const hero=mkCard(null,{background:`linear-gradient(145deg,${lvl.color}18,${C.bg1})`,border:`1px solid ${lvl.color}44`});hero.appendChild(mkLbl('Índice de Atleta Completo'));
+ const r=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'8px'}}),left=h('div');left.appendChild(mkBig(idx.total,'/100',lvl.color,44));const nm=h('div',{style:{fontSize:'14px',fontWeight:'900',color:lvl.color,marginTop:'5px'}});nm.textContent=lvl.name;left.appendChild(nm);r.appendChild(left);const nx=h('div',{style:{fontSize:'11px',color:C.t2,textAlign:'right'}});nx.textContent=lvl.next<100?`${lvl.next-idx.total} puntos al siguiente nivel`:'Nivel superior';r.appendChild(nx);hero.appendChild(r);g.appendChild(hero);
+ const expl=mkCard(null);expl.appendChild(mkLbl('Cómo interpretarlo'));const tx=h('div',{style:{fontSize:'12px',color:C.t1,lineHeight:'1.65',marginTop:'8px'}});tx.textContent='Mide tu desarrollo global a medio plazo: salud, capacidad general, consistencia y equilibrio. No indica si hoy debes entrenar fuerte; para eso sirven Recovery, CTL, ATL y TSB.';expl.appendChild(tx);g.appendChild(expl);
+ const br=mkCard(null);br.appendChild(mkLbl('Desglose'));const list=h('div',{style:{display:'flex',flexDirection:'column',gap:'11px',marginTop:'12px'}});[['Salud',idx.recovery,C.green],['Capacidad',idx.general,C.blue],['Consistencia',idx.consistency,C.purple],['Equilibrio',idx.balance,C.cyan]].forEach(([l,v,c])=>{const rr=h('div'),hd=h('div',{style:{display:'flex',justifyContent:'space-between'}}),a=h('span',{style:{fontSize:'12px',color:C.t1}}),b=h('span',{style:{fontSize:'12px',fontWeight:'800',color:c}});a.textContent=l;b.textContent=v;hd.appendChild(a);hd.appendChild(b);rr.appendChild(hd);rr.appendChild(mkBar(v,100,c,6));list.appendChild(rr)});br.appendChild(list);g.appendChild(br);
+ const rank=Object.entries(st.caps).sort((a,b)=>a[1]-b[1]),ac=mkCard(null,{background:C.purple+'0d',border:`1px solid ${C.purple}33`});ac.appendChild(mkLbl('Qué hacer para mejorarlo'));const at=h('div',{style:{fontSize:'12px',color:C.t1,lineHeight:'1.6',marginTop:'8px'}});at.textContent=`Tus mayores márgenes son ${STATE_LABELS[rank[0][0]].toLowerCase()} y ${STATE_LABELS[rank[1][0]].toLowerCase()}. Prioriza dos estímulos semanales de la primera sin deteriorar la recuperación.`;ac.appendChild(at);g.appendChild(ac);f.appendChild(g);return f;
+}
+
 // ═══ PAGES ════════════════════════════════════════════════════════
 
 // ─── PANEL ────────────────────────────────────────────────────────
 function renderPanel(comp){
-  const{pmc,tl,hrv,wt,eft,rs,iri,ftpE,rec}=comp;
-  const frag=document.createDocumentFragment();
-  const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
-  const athlete=calcCompleteAthleteIndex();
-
-  // ── Índice de Atleta Completo ──
-  const athleteCard=mkCard(null,{background:`linear-gradient(145deg,${C.blue}14,${C.green}0d)`,border:`1px solid ${C.blue}44`});
-  const athleteTop=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'14px'}});
-  const athleteLeft=h('div',{style:{display:'flex',flexDirection:'column',gap:'5px'}});
-  athleteLeft.appendChild(mkLbl('Índice de Atleta Completo'));
-  const athleteNum=mkBig(athlete.total,'/100',athlete.total>=70?C.green:athlete.total>=50?C.amber:C.red,38);
-  athleteLeft.appendChild(athleteNum);
-  const athleteSub=h('span',{style:{fontSize:'11px',color:C.t1,lineHeight:'1.4'}});
-  athleteSub.textContent='Salud, capacidad general, consistencia y equilibrio';
-  athleteLeft.appendChild(athleteSub);
-  const logoMark=h('div',{style:{width:'74px',height:'74px',borderRadius:'22px',background:C.bg0,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:'0'}});
-  logoMark.innerHTML=`<svg viewBox="0 0 100 100" width="58" height="58"><circle cx="50" cy="50" r="40" fill="none" stroke="${C.blue}" stroke-width="7"/><path d="M22 55h15l8-22 11 38 8-16h14" fill="none" stroke="${C.green}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  athleteTop.appendChild(athleteLeft);athleteTop.appendChild(logoMark);athleteCard.appendChild(athleteTop);
-  const athleteGrid=h('div',{className:'grid2',style:{marginTop:'14px'}});
-  [
-    ['Salud',athlete.recovery,C.green],
-    ['Capacidad',athlete.capacity,C.blue],
-    ['Consistencia',athlete.consistency,C.purple],
-    ['Equilibrio',athlete.balance,C.cyan]
-  ].forEach(([label,value,col])=>{
-    const box=h('div',{className:'metric-mini'});
-    const row=h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:'5px'}});
-    const l=h('span',{style:{fontSize:'10px',color:C.t2}});l.textContent=label;
-    const v=h('span',{style:{fontSize:'12px',fontWeight:'800',color:col,fontFamily:'monospace'}});v.textContent=value;
-    row.appendChild(l);row.appendChild(v);box.appendChild(row);box.appendChild(mkBar(value,100,col,4));athleteGrid.appendChild(box);
-  });
-  athleteCard.appendChild(athleteGrid);
-  gap.appendChild(athleteCard);
-
-  const quickCard=mkCard(null);
-  quickCard.appendChild(mkLbl('Acciones rápidas'));
-  const quickGrid=h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginTop:'10px'}});
-  [
-    ['♥ Registro diario','diario',C.green],
-    ['＋ Añadir entreno','entreno',C.blue]
-  ].forEach(([label,page,col])=>{
-    const b=mkBtn(label,()=>{STATE.page=page;renderApp();window.scrollTo(0,0)},col);
-    b.style.padding='11px 6px';quickGrid.appendChild(b);
-  });
-  quickCard.appendChild(quickGrid);gap.appendChild(quickCard);
-
-  // ── Plan de hoy ──
-  const todayIdx=(new Date().getDay()+6)%7;
-  const todayKey=DAY_KEYS[todayIdx];
-  const todayPlan=STATE.plan[todayKey];
-  const todayPlanDiscs=todayPlan?(Array.isArray(todayPlan.discs)?todayPlan.discs:(todayPlan.disc?[todayPlan.disc]:[])):[];
-  if(todayPlan&&(todayPlanDiscs.length||todayPlan.note)){
-    const planCard=mkCard(null,{background:C.purple+'14',border:`1px solid ${C.purple}44`});
-    const planTop=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}});
-    const planLbl=h('span',{className:'lbl'});planLbl.textContent=`Plan de hoy — ${DAY_NAMES[todayIdx]}`;
-    planTop.appendChild(planLbl);
-    if(todayPlanDiscs.length){const ic_=h('span',{style:{fontSize:'18px'}});ic_.textContent=todayPlanDiscs.map(d=>DISC_ICON[d]||'🎯').join(' ');planTop.appendChild(ic_);}
-    planCard.appendChild(planTop);
-    const planText=h('div',{style:{fontSize:'14px',fontWeight:'700',color:C.t0}});
-    planText.textContent=todayPlanDiscs.includes('Descanso')?'Descanso programado':(todayPlan.note||todayPlanDiscs.join(' + ')||'');
-    planCard.appendChild(planText);
-    // Conflicto: plan dice entrenar fuerte pero el estado real dice lo contrario
-    if(rec.lv==='red'&&todayPlanDiscs.length&&!todayPlanDiscs.includes('Descanso')){
-      const conflict=h('div',{style:{marginTop:'8px',fontSize:'12px',color:C.amber,lineHeight:'1.4'}});
-      conflict.textContent=`⚠️ Tu estado de hoy sugiere lo contrario: ${rec.title.toLowerCase()}. Considera sustituir por ${rec.zone||'descanso'}.`;
-      planCard.appendChild(conflict);
-    } else if(rec.lv==='amber'&&todayPlanDiscs.length&&!todayPlanDiscs.includes('Descanso')){
-      const conflict=h('div',{style:{marginTop:'8px',fontSize:'12px',color:C.t1,lineHeight:'1.4'}});
-      conflict.textContent=`Tu recuperación es moderada — si toca calidad, considera bajar intensidad a ${rec.zone||'Z2'}.`;
-      planCard.appendChild(conflict);
-    }
-    const dailyStatus=DB.getDailyStatus(today());
-    const statusLabels={pending:'Pendiente',done:'Completado',modified:'Modificado',skipped:'No realizado',rest:'Descanso'};
-    const statusColors={pending:C.t2,done:C.green,modified:C.amber,skipped:C.red,rest:C.blue};
-    const statusRow=h('div',{style:{marginTop:'12px',paddingTop:'10px',borderTop:`1px solid ${C.border}`,display:'flex',flexDirection:'column',gap:'8px'}});
-    const statusTop=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}});
-    const statusLbl=h('span',{style:{fontSize:'11px',color:C.t2}});statusLbl.textContent='Estado del entrenamiento';
-    statusTop.appendChild(statusLbl);statusTop.appendChild(mkPill(statusLabels[dailyStatus.status]||'Pendiente',statusColors[dailyStatus.status]||C.t2));
-    statusRow.appendChild(statusTop);
-    const actions=h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'6px'}});
-    [
-      ['done','✓ Realizado',C.green],
-      ['modified','↻ Modificado',C.amber],
-      ['skipped','✕ No realizado',C.red],
-      ['rest','○ Descanso',C.blue]
-    ].forEach(([status,label,col])=>{
-      const b=mkBtn(label,()=>{
-        DB.saveDailyStatus({date:today(),status,planned:todayPlanDiscs,note:todayPlan.note||'',updatedAt:new Date().toISOString()});
-        renderApp();
-      },col,status!==dailyStatus.status);
-      b.style.padding='9px 6px';b.style.fontSize='11px';
-      actions.appendChild(b);
-    });
-    statusRow.appendChild(actions);
-    if(dailyStatus.status==='done'){
-      const msg=h('div',{style:{fontSize:'12px',fontWeight:'700',color:C.green,textAlign:'center'}});
-      msg.textContent='✅ Objetivo del día completado';
-      statusRow.appendChild(msg);
-    } else if(dailyStatus.status==='modified'){
-      const msg=h('div',{style:{fontSize:'12px',fontWeight:'700',color:C.amber,textAlign:'center'}});
-      msg.textContent='🔄 Entrenamiento adaptado manteniendo la continuidad';
-      statusRow.appendChild(msg);
-    }
-    planCard.appendChild(statusRow);
-    gap.appendChild(planCard);
-  }
-
-  // Recovery + Rec
-  const recCard=mkCard(null);
-  const recGrid=h('div',{style:{display:'grid',gridTemplateColumns:'110px 1fr',gap:'14px',alignItems:'center'}});
-  recGrid.appendChild(mkRecGauge(rs));
-  const recRight=h('div',{style:{display:'flex',flexDirection:'column',gap:'8px'}});
-  const recCol=rec.lv==='green'?C.green:rec.lv==='red'?C.red:C.amber;
-  recRight.appendChild(mkPill(rec.zone||'Descanso',recCol));
-  const recTitle=h('span',{style:{fontSize:'13px',fontWeight:'700',color:C.t0,lineHeight:'1.3'}});recTitle.textContent=rec.title;recRight.appendChild(recTitle);
-  const recText=h('span',{style:{fontSize:'12px',color:C.t1,lineHeight:'1.5'}});recText.textContent=rec.text;recRight.appendChild(recText);
-  recGrid.appendChild(recRight);recCard.appendChild(recGrid);
-  gap.appendChild(recCard);
-
-  // CTL/ATL/TSB
-  const ctlGrid=h('div',{className:'grid3'});
-  [{l:'CTL',v:pmc.ctl,col:C.green,s:'Forma'},{l:'ATL',v:pmc.atl,col:C.red,s:'Fatiga'},{l:'TSB',v:pmc.tsb>0?`+${pmc.tsb}`:pmc.tsb,col:pmc.tsb>5?C.green:pmc.tsb>-20?C.amber:C.red,s:'Balance'}].forEach(m=>{
-    const c=mkCard(null,{padding:'10px 12px'});
-    c.appendChild(mkLbl(m.l));
-    const bn=h('div',{style:{marginTop:'4px'}});bn.appendChild(mkBig(m.v,null,m.col,22));c.appendChild(bn);
-    const s=h('span',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace'}});s.textContent=m.s;c.appendChild(s);
-    ctlGrid.appendChild(c);
-  });
-  gap.appendChild(ctlGrid);
-  gap.appendChild(mkCard(mkTSBBar(pmc.tsb)));
-
-  // IRI
-  const iriCard=mkCard(null,{cursor:'pointer'});
-  const iriGrid=h('div',{style:{display:'grid',gridTemplateColumns:'auto 1fr',gap:'14px',alignItems:'center'}});
-  iriGrid.appendChild(mkIRIGauge(iri.tot));
-  const iriRight=h('div',{style:{display:'flex',flexDirection:'column',gap:'8px'}});
-  iriRight.appendChild(mkLbl('Preparación específica 70.3'));
-  const iriCol=iri.tot>=70?C.green:iri.tot>=55?C.amber:C.red;
-  iriRight.appendChild(mkBar(iri.tot,100,iriCol,8));
-  const iriChips=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}});
-  Object.entries(iri.comp).slice(0,4).forEach(([k,c])=>{
-    const cd=h('div',{style:{display:'flex',flexDirection:'column',gap:'1px'}});
-    const k_=h('span',{style:{fontSize:'9px',color:C.t2,fontFamily:'monospace'}});k_.textContent=k;
-    const v_=h('span',{style:{fontSize:'11px',fontWeight:'700',color:c.sc>=70?C.green:c.sc>=50?C.amber:C.red,fontFamily:'monospace'}});v_.textContent=c.sc;
-    cd.appendChild(k_);cd.appendChild(v_);iriChips.appendChild(cd);
-  });
-  iriRight.appendChild(iriChips);
-  const iriToggle=h('span',{style:{fontSize:'10px',color:C.t2}});iriToggle.textContent='Ver desglose ▼';
-  iriRight.appendChild(iriToggle);
-  iriGrid.appendChild(iriRight);iriCard.appendChild(iriGrid);
-
-  const iriDetail=h('div',{style:{display:'none',marginTop:'14px',borderTop:`1px solid ${C.border}`,paddingTop:'14px',flexDirection:'column',gap:'10px'}});
-  Object.values(iri.comp).forEach(c=>{
-    const row_=h('div',{style:{display:'flex',flexDirection:'column',gap:'4px'}});
-    const r_=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}});
-    const lbl2=h('span',{style:{fontSize:'12px',color:C.t1}});lbl2.textContent=c.label;
-    const rv=h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}});
-    const v_=h('span',{style:{fontSize:'11px',color:C.t2,fontFamily:'monospace'}});v_.textContent=c.val;
-    const sc_=h('span',{style:{fontSize:'12px',fontWeight:'700',color:c.sc>=70?C.green:c.sc>=50?C.amber:C.red,fontFamily:'monospace'}});sc_.textContent=c.sc;
-    rv.appendChild(v_);rv.appendChild(sc_);r_.appendChild(lbl2);r_.appendChild(rv);
-    row_.appendChild(r_);row_.appendChild(mkBar(c.sc,100,c.sc>=70?C.green:c.sc>=50?C.amber:C.red,4));
-    iriDetail.appendChild(row_);
-  });
-  iriCard.appendChild(iriDetail);
-  iriCard.addEventListener('click',()=>{
-    const open=STATE.iriOpen=!STATE.iriOpen;
-    iriDetail.style.display=open?'flex':'none';
-    iriToggle.textContent=open?'Ocultar ▲':'Ver desglose ▼';
-  });
-  gap.appendChild(iriCard);
-
-  // Vitals 2x2
-  const vGrid=h('div',{className:'grid2'});
-
-  // HRV
-  const hrvCard=mkCard(null,{padding:'12px 14px'});
-  hrvCard.appendChild(mkLbl('HRV hoy'));
-  const hrvCol=hrv.signal?(hrv.signal>=95?C.green:hrv.signal>=85?C.amber:C.red):C.t0;
-  const hbn=h('div',{style:{margin:'4px 0'}});hbn.appendChild(mkBig(tl?.hrv??'—','ms',hrvCol,24));hrvCard.appendChild(hbn);
-  const hrow=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}});
-  const hb30=h('span',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace'}});hb30.textContent=`Base30 ${hrv.b30}`;
-  hrow.appendChild(hb30);
-  if(hrv.signal){const hp=mkPill(`${hrv.signal}%`,hrv.signal>=95?C.green:hrv.signal>=85?C.amber:C.red);hrow.appendChild(hp);}
-  hrvCard.appendChild(hrow);
-  const hspk=hHTML(sparkSVG(hrv.hist.slice(-14).map(h_=>h_.hrv),C.purple,90,26));
-  hspk.style.marginTop='6px';hrvCard.appendChild(hspk);
-  vGrid.appendChild(hrvCard);
-
-  // Sueño
-  const slpCard=mkCard(null,{padding:'12px 14px'});
-  slpCard.appendChild(mkLbl('Sueño'));
-  const slpCol=tl?.sleep>=7.5?C.green:tl?.sleep>=6?C.amber:tl?.sleep?C.red:C.t0;
-  const sbn=h('div',{style:{margin:'4px 0'}});sbn.appendChild(mkBig(tl?.sleep??'—','h',slpCol,24));slpCard.appendChild(sbn);
-  const stars=h('div',{style:{display:'flex',gap:'3px',margin:'4px 0'}});
-  for(let i=1;i<=5;i++){const s=h('div',{style:{flex:'1',height:'4px',borderRadius:'2px',background:i<=(tl?.sq||0)/2?C.blue:C.border}});stars.appendChild(s);}
-  slpCard.appendChild(stars);
-  const sqLbl=h('span',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace'}});sqLbl.textContent=`Calidad ${tl?.sq??'—'}/10`;slpCard.appendChild(sqLbl);
-  vGrid.appendChild(slpCard);
-
-  // Peso
-  const wtCard=mkCard(null,{padding:'12px 14px'});
-  wtCard.appendChild(mkLbl('Peso'));
-  const wrow=h('div',{style:{display:'flex',alignItems:'baseline',gap:'6px',margin:'4px 0'}});
-  wrow.appendChild(mkBig(tl?.weight??wt.cur??'—','kg',C.t0,24));
-  if(wt.d7!==null){const d7=h('span',{style:{fontSize:'11px',color:wt.d7<=0?C.green:C.amber,fontFamily:'monospace'}});d7.textContent=`${wt.d7>0?'+':''}${wt.d7}`;wrow.appendChild(d7);}
-  wtCard.appendChild(wrow);
-  const wlbl=h('span',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace'}});wlbl.textContent=`Obj ${STATE.cfg.targetWeight}kg · déficit ${wt.def}kg`;wtCard.appendChild(wlbl);
-  const wspk=hHTML(sparkSVG(wt.hist.slice(-14).map(h_=>h_.weight),C.cyan,90,26));wspk.style.marginTop='6px';wtCard.appendChild(wspk);
-  vGrid.appendChild(wtCard);
-
-  // FTP/EF
-  const ftpCard=mkCard(null,{padding:'12px 14px'});
-  ftpCard.appendChild(mkLbl('FTP / EF'));
-  const fbn=h('div',{style:{margin:'4px 0'}});fbn.appendChild(mkBig(ftpE,'W',C.blue,24));ftpCard.appendChild(fbn);
-  const flbl=h('span',{style:{fontSize:'10px',color:C.t2,fontFamily:'monospace'}});flbl.textContent=`${r1(ftpE/(wt.cur||82))} W/kg · EF ${eft.cur??'—'}`;ftpCard.appendChild(flbl);
-  const eflbl=h('div',{style:{marginTop:'4px'}});
-  const efs=h('span',{style:{fontSize:'10px',color:eft.sl>0?C.green:eft.sl<-0.05?C.red:C.t2,fontFamily:'monospace'}});efs.textContent=`EF ${eft.sl>=0?'↑':'↓'} ${eft.sl>0?'+':''}${eft.sl}/sem`;
-  eflbl.appendChild(efs);ftpCard.appendChild(eflbl);
-  vGrid.appendChild(ftpCard);
-
-  gap.appendChild(vGrid);
-  gap.appendChild(mkCard(mkWeekBars(STATE.wks)));
-
-  // Alerts
-  if(pmc.tsb<-30)gap.appendChild(mkAlert('red','Riesgo sobreentrenamiento',`TSB ${pmc.tsb}. Reduce carga.`));
-  if(hrv.signal&&hrv.signal<85)gap.appendChild(mkAlert('red','HRV crítico',`Señal HRV ${hrv.signal}%. Descansa.`));
-  else if(hrv.signal&&hrv.signal<90)gap.appendChild(mkAlert('amber','HRV bajo',`HRV ${hrv.signal}% del baseline.`));
-  if(tl?.sleep&&tl.sleep<6)gap.appendChild(mkAlert('amber','Sueño insuficiente',`Solo ${tl.sleep}h anoche.`));
-
-  frag.appendChild(gap);
-  return frag;
+ const f=document.createDocumentFragment(),g=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}}),st=calcAthleteState();persistCurrentAthleteState(st);const load=calcLoadUX(),mom=calcMomentumUX(),con=calcConsistencyUX(),idx=calcCompleteAthleteIndex(),lvl=athleteLevelUX(idx.total),status=athleteStatusUX(st,load,mom),rec=athleteRec(st);
+ const key=DAY_KEYS[(new Date().getDay()+6)%7],p=STATE.plan[key]||{},discs=Array.isArray(p.discs)?p.discs:(p.disc?[p.disc]:[]),ds=DB.getDailyStatus(today()),sl={pending:'Pendiente',done:'Completado',modified:'Modificado',skipped:'No realizado',rest:'Descanso'},sc={pending:C.t2,done:C.green,modified:C.amber,skipped:C.red,rest:C.blue};
+ const s=mkCard(null,{background:`linear-gradient(145deg,${status.color}1a,${C.bg1})`,border:`1px solid ${status.color}55`});s.appendChild(mkLbl('Estado del atleta'));const sr=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'8px'}}),ll=h('div'),tt=h('div',{style:{fontSize:'25px',fontWeight:'950',color:status.color}});tt.textContent=status.label;ll.appendChild(tt);const dd=h('div',{style:{fontSize:'12px',color:C.t1,marginTop:'5px'}});dd.textContent=status.text;ll.appendChild(dd);sr.appendChild(ll);sr.appendChild(mkPill(mom.label,mom.color));s.appendChild(sr);g.appendChild(s);
+ const rc=mkCard(null);rc.appendChild(mkLbl('Recovery'));const rr=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'8px'}});rr.appendChild(mkBig(st.recovery,'/100',st.recovery>=70?C.green:st.recovery>=50?C.amber:C.red,40));const latest=STATE.logs.at(-1)||{},facts=h('div',{style:{display:'flex',flexDirection:'column',gap:'5px',minWidth:'140px'}});[['Sueño',latest.sleep?latest.sleep+' h':'—'],['HRV',latest.hrv?latest.hrv+' ms':'—'],['Fatiga',latest.fat?latest.fat+'/10':'—']].forEach(([a,b])=>{const x=h('div',{style:{display:'flex',justifyContent:'space-between',gap:'12px',fontSize:'11px'}}),y=h('span',{style:{color:C.t2}}),z=h('span',{style:{fontWeight:'800'}});y.textContent=a;z.textContent=b;x.appendChild(y);x.appendChild(z);facts.appendChild(x)});rr.appendChild(facts);rc.appendChild(rr);g.appendChild(rc);
+ const lc=mkCard(null);lc.appendChild(mkLbl('Carga y forma'));const lg=h('div',{className:'grid3',style:{marginTop:'10px'}});[['CTL',load.ctl,'Fitness',C.blue],['ATL',load.atl,'Fatiga',C.amber],['TSB',load.tsb,'Forma',load.tsb>=0?C.green:C.red]].forEach(([a,b,c,d])=>{const q=h('div',{className:'metric-mini'});q.appendChild(mkLbl(a));const n=h('div',{style:{fontSize:'22px',fontWeight:'900',color:d,marginTop:'4px'}});n.textContent=b;q.appendChild(n);const sm=h('div',{style:{fontSize:'9px',color:C.t2}});sm.textContent=c;q.appendChild(sm);lg.appendChild(q)});lc.appendChild(lg);g.appendChild(lc);
+ const tc=mkCard(null);tc.appendChild(mkLbl('Tendencia'));const tg=h('div',{className:'grid2',style:{marginTop:'10px'}});[['Momentum',mom.score,mom.label,mom.color],['Consistencia',con.score,con.active+' días activos',C.purple]].forEach(([a,b,c,d])=>{const q=h('div',{className:'metric-mini'});q.appendChild(mkLbl(a));const n=h('div',{style:{fontSize:'24px',fontWeight:'900',color:d,marginTop:'5px'}});n.textContent=b;q.appendChild(n);q.appendChild(mkBar(b,100,d,5));const sm=h('div',{style:{fontSize:'10px',color:C.t2,marginTop:'5px'}});sm.textContent=c;q.appendChild(sm);tg.appendChild(q)});tc.appendChild(tg);g.appendChild(tc);
+ const re=mkCard(null,{background:C.purple+'10',border:`1px solid ${C.purple}33`});re.appendChild(mkLbl('Recomendación de hoy'));const rt=h('div',{style:{fontSize:'17px',fontWeight:'900',color:C.purple,marginTop:'7px'}});rt.textContent=rec.title;const rx=h('div',{style:{fontSize:'12px',color:C.t1,marginTop:'7px'}});rx.textContent=rec.text;re.appendChild(rt);re.appendChild(rx);g.appendChild(re);
+ const pc=mkCard(null),ph=h('div',{style:{display:'flex',justifyContent:'space-between'}});ph.appendChild(mkLbl('Plan de hoy'));ph.appendChild(mkPill(sl[ds.status]||'Pendiente',sc[ds.status]||C.t2));pc.appendChild(ph);const pt=h('div',{style:{fontSize:'17px',fontWeight:'900',marginTop:'9px'}});pt.textContent=discs.length?discs.join(' + '):'Sin sesión planificada';pc.appendChild(pt);if(p.note){const n=h('div',{style:{fontSize:'11px',color:C.t2,marginTop:'5px'}});n.textContent=p.note;pc.appendChild(n)}g.appendChild(pc);
+ const qc=mkCard(null);qc.appendChild(mkLbl('Acciones rápidas'));const qg=h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginTop:'10px'}});[['♥ Registro diario','diario',C.green],['＋ Añadir entreno','entreno',C.blue]].forEach(([a,b,c])=>{const bt=mkBtn(a,()=>{STATE.page=b;renderApp();window.scrollTo(0,0)},c);qg.appendChild(bt)});qc.appendChild(qg);g.appendChild(qc);
+ const ic=mkCard(null,{background:lvl.color+'0c',border:`1px solid ${lvl.color}30`}),ih=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}}),il=h('div');il.appendChild(mkLbl('Índice de Atleta Completo'));const nm=h('div',{style:{fontSize:'14px',fontWeight:'900',color:lvl.color,marginTop:'5px'}});nm.textContent=lvl.name;il.appendChild(nm);ih.appendChild(il);ih.appendChild(mkBig(idx.total,'/100',lvl.color,30));ic.appendChild(ih);const ix=h('div',{style:{fontSize:'11px',color:C.t2,marginTop:'8px'}});ix.textContent='Mide desarrollo global a medio plazo, no disponibilidad para entrenar hoy.';ic.appendChild(ix);const bt=mkBtn('Ver explicación',()=>{STATE.page='indice';renderApp();window.scrollTo(0,0)},lvl.color,true);bt.style.marginTop='10px';ic.appendChild(bt);g.appendChild(ic);
+ f.appendChild(g);return f;
 }
 
-// ─── DIARIO ────────────────────────────────────────────────────────
 function renderDiario(){
   const ex=STATE.logs.find(l=>l.date===today())||{};
   const form={date:today(),weight:ex.weight??'',hrv:ex.hrv??'',sleep:ex.sleep??'',sq:ex.sq??7,fat:ex.fat??3,mus:ex.mus??3,mood:ex.mood??7,str:ex.str??3,comment:ex.comment??''};
@@ -3050,6 +2859,7 @@ function renderApp(){
   else if(STATE.page==='evolucionHub')pageContent=renderEvolucionHub();
   else if(STATE.page==='masHub')pageContent=renderMasHub();
   else if(STATE.page==='estado')pageContent=renderEstado();
+  else if(STATE.page==='indice')pageContent=renderIndiceDetalle();
   else if(STATE.page==='nucleo')pageContent=renderNucleo();
   else if(STATE.page==='cfg')pageContent=renderConfig();
   if(pageContent)content.appendChild(pageContent);
