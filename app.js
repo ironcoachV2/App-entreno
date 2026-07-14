@@ -1311,6 +1311,18 @@ function renderPanel(comp){
   athleteCard.appendChild(athleteGrid);
   gap.appendChild(athleteCard);
 
+  const quickCard=mkCard(null);
+  quickCard.appendChild(mkLbl('Acciones rápidas'));
+  const quickGrid=h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginTop:'10px'}});
+  [
+    ['♥ Registro diario','diario',C.green],
+    ['＋ Añadir entreno','entreno',C.blue]
+  ].forEach(([label,page,col])=>{
+    const b=mkBtn(label,()=>{STATE.page=page;renderApp();window.scrollTo(0,0)},col);
+    b.style.padding='11px 6px';quickGrid.appendChild(b);
+  });
+  quickCard.appendChild(quickGrid);gap.appendChild(quickCard);
+
   // ── Plan de hoy ──
   const todayIdx=(new Date().getDay()+6)%7;
   const todayKey=DAY_KEYS[todayIdx];
@@ -1906,7 +1918,12 @@ function renderEntreno(){
   fInner.appendChild(saveBtn);
   fCard.appendChild(fInner);gap.appendChild(fCard);
 
-  // ── Historial completo — Entreno ──
+  frag.appendChild(gap);return frag;
+}
+
+function renderHistorial(){
+  const frag=document.createDocumentFragment();
+  const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
   const hist=mkCard(null);
   const histHead=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}});
   histHead.appendChild(mkLbl(`Histórico completo (${STATE.wks.length} sesiones)`));
@@ -2007,6 +2024,70 @@ function renderEntreno(){
   });
   renderWkHistory();
   hist.appendChild(hlist);gap.appendChild(hist);
+
+  frag.appendChild(gap);return frag;
+}
+
+
+function renderStats(){
+  const frag=document.createDocumentFragment();
+  const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
+  const wks=STATE.wks;
+  const recent=wks.filter(w=>dRange(28).includes(w.date));
+  const totalMin=recent.reduce((a,w)=>a+(+w.duration||0),0);
+  const totalTss=recent.reduce((a,w)=>a+(+w.tss||0),0);
+  const byDisc={};
+  recent.forEach(w=>{
+    const k=w.discipline||'Otro';
+    if(!byDisc[k])byDisc[k]={sessions:0,min:0,tss:0,distance:0};
+    byDisc[k].sessions++;
+    byDisc[k].min+=+w.duration||0;
+    byDisc[k].tss+=+w.tss||0;
+    byDisc[k].distance+=+w.distance||0;
+  });
+
+  const top=mkCard(null,{background:C.blue+'10',border:`1px solid ${C.blue}33`});
+  top.appendChild(mkLbl('Estadísticas — últimos 28 días'));
+  const grid=h('div',{className:'grid2',style:{marginTop:'10px'}});
+  [
+    ['Sesiones',recent.length,C.green],
+    ['Horas',r1(totalMin/60),C.blue],
+    ['TSS',r0(totalTss),C.amber],
+    ['Disciplinas',Object.keys(byDisc).length,C.purple]
+  ].forEach(([l,v,c])=>{
+    const b=h('div',{className:'metric-mini'});b.appendChild(mkLbl(l));
+    const vv=h('div',{style:{fontSize:'24px',fontWeight:'900',color:c,marginTop:'5px'}});vv.textContent=v;b.appendChild(vv);grid.appendChild(b);
+  });
+  top.appendChild(grid);gap.appendChild(top);
+
+  const discCard=mkCard(null);discCard.appendChild(mkLbl('Distribución por disciplina'));
+  const list=h('div',{style:{display:'flex',flexDirection:'column',gap:'10px',marginTop:'10px'}});
+  const maxMin=Math.max(1,...Object.values(byDisc).map(x=>x.min));
+  Object.entries(byDisc).sort((a,b)=>b[1].min-a[1].min).forEach(([disc,d])=>{
+    const row=h('div',{style:{display:'flex',flexDirection:'column',gap:'5px'}});
+    const head=h('div',{style:{display:'flex',justifyContent:'space-between'}});
+    const l=h('span',{style:{fontSize:'12px',fontWeight:'700',color:DISC_C[disc]||C.t1}});l.textContent=`${DISC_ICON[disc]||'🎯'} ${disc}`;
+    const v=h('span',{style:{fontSize:'11px',color:C.t2,fontFamily:'monospace'}});v.textContent=`${d.sessions} ses · ${r1(d.min/60)} h · TSS ${r0(d.tss)}`;
+    head.appendChild(l);head.appendChild(v);row.appendChild(head);row.appendChild(mkBar(d.min,maxMin,DISC_C[disc]||C.blue,6));list.appendChild(row);
+  });
+  if(!recent.length){const e=h('div',{style:{fontSize:'12px',color:C.t2,textAlign:'center',padding:'20px'}});e.textContent='No hay sesiones en los últimos 28 días.';list.appendChild(e);}
+  discCard.appendChild(list);gap.appendChild(discCard);
+
+  const zoneCard=mkCard(null);zoneCard.appendChild(mkLbl('Intensidad registrada'));
+  const zones={Z1:0,Z2:0,Z3:0,Z4:0,Z5:0,Z6:0,Z7:0};
+  recent.forEach(w=>{
+    if(w.zoneBreakdown)Object.entries(w.zoneBreakdown).forEach(([z,m])=>{if(zones[z]!==undefined)zones[z]+=+m||0});
+    else if(zones[w.zone]!==undefined)zones[w.zone]+=+w.duration||0;
+  });
+  const ztot=Object.values(zones).reduce((a,b)=>a+b,0)||1;
+  const zlist=h('div',{style:{display:'flex',flexDirection:'column',gap:'8px',marginTop:'10px'}});
+  Object.entries(zones).forEach(([z,m])=>{
+    const row=h('div',{style:{display:'grid',gridTemplateColumns:'30px 1fr 54px',gap:'8px',alignItems:'center'}});
+    const zl=h('span',{style:{fontSize:'11px',fontWeight:'800'}});zl.textContent=z;
+    row.appendChild(zl);row.appendChild(mkBar(m,ztot,PZ_COL[z]||C.blue,6));
+    const zv=h('span',{style:{fontSize:'10px',color:C.t2,textAlign:'right',fontFamily:'monospace'}});zv.textContent=`${r0(m)}m`;row.appendChild(zv);zlist.appendChild(row);
+  });
+  zoneCard.appendChild(zlist);gap.appendChild(zoneCard);
   frag.appendChild(gap);return frag;
 }
 
@@ -2032,6 +2113,38 @@ function renderProgreso(comp){
 
   const frag=document.createDocumentFragment();
   const gap=h('div',{style:{display:'flex',flexDirection:'column',gap:'12px'}});
+
+  const savedGoal=JSON.parse(localStorage.getItem('ic_active_goal_v1')||'{"type":"ironman703","date":"2027-04-06","name":"Ironman 70.3"}');
+  const goalCard=mkCard(null,{background:C.blue+'10',border:`1px solid ${C.blue}33`});
+  goalCard.appendChild(mkLbl('Objetivo de progreso'));
+  const goalGrid=h('div',{className:'grid2',style:{marginTop:'10px'}});
+  const goalSel=mkSel('Tipo de objetivo',savedGoal.type,v=>{
+    savedGoal.type=v;localStorage.setItem('ic_active_goal_v1',JSON.stringify(savedGoal));renderApp();
+  },[
+    {v:'ironman703',l:'Ironman 70.3'},
+    {v:'cicloturismo',l:'Marcha cicloturista'},
+    {v:'carrera10k',l:'Carrera 10 km'},
+    {v:'media',l:'Media maratón'},
+    {v:'trail',l:'Trail / montaña'},
+    {v:'general',l:'Atleta completo'}
+  ]);
+  const goalDate=mkInp('Fecha objetivo','date',savedGoal.date||'',v=>{
+    savedGoal.date=v;localStorage.setItem('ic_active_goal_v1',JSON.stringify(savedGoal));
+  });
+  goalGrid.appendChild(goalSel);goalGrid.appendChild(goalDate);goalCard.appendChild(goalGrid);
+
+  let goalScore=rrs.global,goalLabel='Preparación Ironman 70.3',goalText='Combina natación, ciclismo, carrera y consistencia.';
+  if(savedGoal.type==='cicloturismo'){goalScore=r0(rrs.bike.total*.75+cl((bikes.slice(-8).reduce((a,w)=>a+(w.duration||0),0)/900)*100,0,100)*.25);goalLabel='Preparación cicloturista';goalText='Prioriza resistencia ciclista, volumen largo y consistencia.'}
+  else if(savedGoal.type==='carrera10k'){goalScore=r0(rrs.run.total*.8+cl((320/(uR||999))*100,0,100)*.2);goalLabel='Preparación 10 km';goalText='Prioriza carrera específica, umbral y tolerancia al ritmo.'}
+  else if(savedGoal.type==='media'){goalScore=r0(rrs.run.total*.7+cl((runs.slice(-8).reduce((a,w)=>a+(w.duration||0),0)/500)*100,0,100)*.3);goalLabel='Preparación media maratón';goalText='Prioriza volumen de carrera, tirada larga y estabilidad aeróbica.'}
+  else if(savedGoal.type==='trail'){goalScore=r0(rrs.run.total*.65+cl((runs.slice(-10).reduce((a,w)=>a+(w.elevation||0),0)/3000)*100,0,100)*.35);goalLabel='Preparación trail';goalText='Combina resistencia, desnivel, fuerza y técnica en terreno.'}
+  else if(savedGoal.type==='general'){const ac=calcCompleteAthleteIndex();goalScore=ac.total;goalLabel='Desarrollo de atleta completo';goalText='Equilibra salud, capacidad física, consistencia y variedad.'}
+
+  const goalResult=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'12px',paddingTop:'12px',borderTop:`1px solid ${C.border}`}});
+  const gl=h('div');const gt=h('div',{style:{fontSize:'14px',fontWeight:'800'}});gt.textContent=goalLabel;
+  const gd=h('div',{style:{fontSize:'11px',color:C.t2,marginTop:'4px',lineHeight:'1.4'}});gd.textContent=goalText;gl.appendChild(gt);gl.appendChild(gd);
+  goalResult.appendChild(gl);goalResult.appendChild(mkBig(goalScore,'/100',goalScore>=70?C.green:goalScore>=50?C.amber:C.red,30));
+  goalCard.appendChild(goalResult);gap.appendChild(goalCard);
 
   // ══ RACE READINESS SCORE — sección principal ══
   const rrsCard=mkCard(null,{background:C.purple+'14',border:`1px solid ${C.purple}44`});
@@ -2749,7 +2862,8 @@ function renderConfig(){
       cfgHistory:DB.loadCfgHistory(),
       dailyStatus:DB.loadDailyStatus(),
       athleteCore:DB.loadAthleteCore(),
-      athleteStateHistory:DB.loadAthleteStateHistory()
+      athleteStateHistory:DB.loadAthleteStateHistory(),
+      activeGoal:JSON.parse(localStorage.getItem('ic_active_goal_v1')||'null')
     };
     const text=JSON.stringify(backup,null,2);
     const filename='ironcoach_backup_'+today()+'.json';
@@ -2819,6 +2933,7 @@ function renderConfig(){
         if(Array.isArray(data.dailyStatus))localStorage.setItem(DB.KEY_DAILY_STATUS,JSON.stringify(data.dailyStatus));
         if(data.athleteCore)DB.saveAthleteCore(data.athleteCore);
         if(Array.isArray(data.athleteStateHistory))localStorage.setItem(DB.KEY_ATHLETE_STATE,JSON.stringify(data.athleteStateHistory));
+        if(data.activeGoal)localStorage.setItem('ic_active_goal_v1',JSON.stringify(data.activeGoal));
         reloadData();renderApp();
         alert('Importación completada.');
       }catch(err){alert('Error al leer el archivo: '+err.message);}
@@ -2926,6 +3041,8 @@ function renderApp(){
   else if(STATE.page==='plan')pageContent=renderPlan();
   else if(STATE.page==='diario')pageContent=renderDiario();
   else if(STATE.page==='entreno')pageContent=renderEntreno();
+  else if(STATE.page==='historial')pageContent=renderHistorial();
+  else if(STATE.page==='stats')pageContent=renderStats();
   else if(STATE.page==='progreso')pageContent=renderProgreso(comp);
   else if(STATE.page==='analisis')pageContent=renderAnalisis(comp);
   else if(STATE.page==='zonas')pageContent=renderZonas();
