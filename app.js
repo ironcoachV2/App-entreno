@@ -643,6 +643,125 @@ function parseCardiacDrift(txt){
   return null;
 }
 
+function parseDurationFlexible(v){
+  if(v===null||v===undefined)return null;
+  const s=String(v).trim();
+  if(!s)return null;
+  if(/^\d+(\.\d+)?$/.test(s))return +s;
+  const parts=s.split(':').map(Number);
+  if(parts.some(n=>Number.isNaN(n)))return null;
+  if(parts.length===3)return r1(parts[0]*60+parts[1]+parts[2]/60);
+  if(parts.length===2)return r1(parts[0]+parts[1]/60);
+  return null;
+}
+function parseZoneValueToMinutes(v){
+  if(v===null||v===undefined)return 0;
+  const s=String(v).trim();
+  if(!s)return 0;
+  if(/^\d+(\.\d+)?$/.test(s))return +s;
+  const parts=s.split(':').map(Number);
+  if(parts.some(n=>Number.isNaN(n)))return 0;
+  if(parts.length===3)return r1(parts[0]*60+parts[1]+parts[2]/60);
+  if(parts.length===2)return r1(parts[0]+parts[1]/60);
+  return 0;
+}
+function normalizeKey(k){
+  return k.trim().toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,'_');
+}
+function parseStructuredIronCoach(txt){
+  const lines=txt.split(/\r?\n/);
+  const raw={};
+  lines.forEach(line=>{
+    const clean=line.trim();
+    if(!clean||clean.startsWith('#'))return;
+    const m=clean.match(/^([^:=]+)\s*[:=]\s*(.*)$/);
+    if(!m)return;
+    raw[normalizeKey(m[1])]=m[2].trim();
+  });
+  if(!Object.keys(raw).length)return null;
+  const get=(...keys)=>{
+    for(const k of keys){
+      const nk=normalizeKey(k);
+      if(raw[nk]!==undefined)return raw[nk];
+    }
+    return null;
+  };
+  const num=v=>{
+    if(v===null||v===undefined||v==='')return null;
+    const n=parseFloat(String(v).replace(',','.'));
+    return Number.isFinite(n)?n:null;
+  };
+  const out={
+    date:get('FECHA','DATE'),
+    discipline:get('DISCIPLINA','DEPORTE','SPORT'),
+    sessionType:get('TIPO','TIPO_SESION','SESSION_TYPE'),
+    duration:parseDurationFlexible(get('DURACION','DURACION_MIN','TIEMPO')),
+    distance:num(get('DISTANCIA','DISTANCIA_KM')),
+    tss:num(get('TSS')),
+    powerAvg:num(get('POTENCIA','POTENCIA_MEDIA','POWER_AVG')),
+    powerNorm:num(get('NP','POTENCIA_NP','POWER_NORM')),
+    powerMax:num(get('POTENCIA_MAX','POWER_MAX')),
+    hrAvg:num(get('FC','FC_MEDIA','HR_AVG')),
+    hrMax:num(get('FC_MAX','FC_MAXIMA','HR_MAX')),
+    cadence:num(get('CADENCIA','CADENCIA_MEDIA','CADENCE')),
+    elevation:num(get('DESNIVEL','ELEVACION','ELEVATION')),
+    rpe:num(get('RPE','ESFUERZO')),
+    paceAvgSec:parsePace(get('RITMO','RITMO_KM','PACE')),
+    swimPaceSec:parsePace(get('RITMO_100M','SWIM_PACE','RITMO_NATACION')),
+    swolf:num(get('SWOLF')),
+    comment:get('COMENTARIO','NOTAS','RESUMEN')||'',
+    zone:get('ZONA','ZONA_DOMINANTE'),
+    cardiacDrift:num(get('DERIVA_CARDIACA','CARDIAC_DRIFT'))
+  };
+  const zones={};
+  for(let i=1;i<=7;i++){
+    const v=get(`Z${i}`,`ZONA_${i}`);
+    const m=parseZoneValueToMinutes(v);
+    if(m>0)zones[`Z${i}`]=m;
+  }
+  if(Object.keys(zones).length){
+    out.zoneBreakdown=zones;
+    let dom='Z1',max=-1;
+    Object.entries(zones).forEach(([z,m])=>{if(m>max){dom=z;max=m;}});
+    out.zone=dom;
+  }
+  Object.keys(out).forEach(k=>{
+    if(out[k]===null||out[k]===undefined||out[k]==='')delete out[k];
+  });
+  return out;
+}
+function buildIronCoachTemplate(){
+  return `FORMATO=IRONCOACH_V1
+FECHA=${today()}
+DISCIPLINA=Ciclismo
+TIPO=Resistencia
+DURACION=01:30:00
+DISTANCIA=45.0
+TSS=75
+POTENCIA_MEDIA=220
+NP=235
+POTENCIA_MAX=650
+FC_MEDIA=138
+FC_MAX=165
+CADENCIA=86
+DESNIVEL=450
+RPE=6
+Z1=00:10:00
+Z2=01:00:00
+Z3=00:15:00
+Z4=00:05:00
+Z5=00:00:00
+Z6=00:00:00
+Z7=00:00:00
+DERIVA_CARDIACA=
+RITMO_KM=
+RITMO_100M=
+SWOLF=
+COMENTARIO=Resumen breve de la sesión`;
+}
+
 // ═══ WEEKLY PLAN PARSER ═══════════════════════════════════════════
 const DAY_NAMES=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const DAY_KEYS=['lun','mar','mie','jue','vie','sab','dom'];
@@ -1420,22 +1539,50 @@ function renderEntreno(){
   // Parser card
   const pCard=mkCard(null);
   const pInner=h('div',{style:{display:'flex',flexDirection:'column',gap:'10px'}});
-  pInner.appendChild(mkLbl('⚡ Entrada rápida en lenguaje natural'));
-  const pta=h('textarea',{rows:'4',className:'inp',placeholder:'Ej: Ciclismo 1h43, 52 km, 609 m desnivel, potencia media 202 W, NP 234 W, FC media 147, TSS 83.6\nEj: Carrera 45 min, 8.5 km, ritmo 5:15/km, FC media 145, RPE 6\nEj: Natación 2000 m, 42 min, ritmo 2:06/100m, SWOLF 42'});
+  pInner.appendChild(mkLbl('⚡ Importador inteligente IronCoach'));
+  const modeHelp=h('div',{style:{fontSize:'11px',color:C.t1,lineHeight:'1.5'}});
+  modeHelp.textContent='Pega un bloque estructurado CAMPO=VALOR para máxima precisión. El lenguaje natural sigue funcionando como alternativa.';
+  pInner.appendChild(modeHelp);
+  const pta=h('textarea',{rows:'10',className:'inp',placeholder:'Pega aquí el bloque IronCoach que te enviaré después de cada entrenamiento.'});
   pta.style.borderColor=C.blue+'44';pInner.appendChild(pta);
   const pResult=h('div');pInner.appendChild(pResult);
 
-  const pBtn=mkBtn('Analizar → rellenar campos',()=>{
+  const templateRow=h('div',{style:{display:'flex',gap:'8px'}});
+  const exampleBtn=mkBtn('Ver plantilla',()=>{
+    pta.value=buildIronCoachTemplate();
+    pta.focus();
+  },C.blue,true);
+  exampleBtn.style.flex='1';
+  const clearBtn=mkBtn('Limpiar',()=>{
+    pta.value='';pResult.innerHTML='';
+  },C.t2,true);
+  clearBtn.style.flex='1';
+  templateRow.appendChild(exampleBtn);templateRow.appendChild(clearBtn);pInner.appendChild(templateRow);
+
+  const pBtn=mkBtn('Analizar → rellenar todos los campos',()=>{
     if(!pta.value.trim())return;
-    parsed=parseText(pta.value);
+    parsed=parseStructuredIronCoach(pta.value)||parseText(pta.value);
     // Apply to form inputs
-    if(parsed.discipline){form.discipline=parsed.discipline;discSel.querySelector('select').value=parsed.discipline;updateFields();}
-    if(parsed.zone){form.zone=parsed.zone;}
+    if(parsed.date){
+      form.date=parsed.date;
+      const di=dateInp.querySelector('input');if(di)di.value=parsed.date;
+    }
+    if(parsed.discipline){
+      const known=DISCS.includes(parsed.discipline)?parsed.discipline:
+        /trail|montaña/i.test(parsed.discipline)?'Carrera':
+        /calistenia/i.test(parsed.discipline)?'Fuerza':'Otro';
+      form.discipline=known;discSel.querySelector('select').value=known;updateFields();
+    }
+    if(parsed.zone){
+      form.zone=parsed.zone;
+      zoneSel.querySelector('select').value=parsed.zone;
+    }
     if(parsed.duration!==undefined)setInpVal(durInp,parsed.duration);
     if(parsed.distance!==undefined)setInpVal(distInp,parsed.distance);
     if(parsed.tss!==undefined)setInpVal(tssInp,parsed.tss);
     if(parsed.powerAvg!==undefined&&powAvgInp)setInpVal(powAvgInp,parsed.powerAvg);
     if(parsed.powerNorm!==undefined&&powNPInp)setInpVal(powNPInp,parsed.powerNorm);
+    if(parsed.powerMax!==undefined)form.powerMax=parsed.powerMax;
     if(parsed.hrAvg!==undefined)setInpVal(hrAvgInp,parsed.hrAvg);
     if(parsed.hrMax!==undefined)setInpVal(hrMaxInp,parsed.hrMax);
     if(parsed.cadence!==undefined&&cadInp)setInpVal(cadInp,parsed.cadence);
@@ -1445,6 +1592,10 @@ function renderEntreno(){
     if(parsed.swimPaceSec!==undefined&&swimPaceInp)setInpVal(swimPaceInp,fmtPace(parsed.swimPaceSec));
     if(parsed.swolf!==undefined&&swolfInp)setInpVal(swolfInp,parsed.swolf);
     if(parsed.comment)setInpVal(comInp,parsed.comment);
+    if(parsed.sessionType){
+      const prefix=`Tipo: ${parsed.sessionType}`;
+      comInp.value=comInp.value?`${prefix}\n${comInp.value}`:prefix;
+    }
     if(parsed.zoneBreakdown){
       zoneBreakdown=parsed.zoneBreakdown;
       zbInp.value=Object.entries(parsed.zoneBreakdown).map(([z,m])=>`${m}min ${z}`).join(', ');
@@ -1454,7 +1605,10 @@ function renderEntreno(){
     const keys=Object.entries(parsed).filter(([,v])=>v!==undefined);
     if(keys.length){
       const pb=h('div',{className:'parse-box'});
-      const pt=h('span',{style:{fontSize:'11px',color:C.purple,fontWeight:'700',fontFamily:'monospace'}});pt.textContent='Detectado:';pb.appendChild(pt);
+      const structured=!!parseStructuredIronCoach(pta.value);
+      const pt=h('span',{style:{fontSize:'11px',color:structured?C.green:C.purple,fontWeight:'700',fontFamily:'monospace'}});
+      pt.textContent=structured?'✓ Formato estructurado reconocido':'Detectado mediante lenguaje natural';
+      pb.appendChild(pt);
       const pc=h('div',{className:'parse-chips'});
       keys.forEach(([k,v])=>{const ch=h('span',{className:'parse-chip'});ch.innerHTML=`${k}: <span style="color:#eef0f8">${v}</span>`;pc.appendChild(ch);});
       pb.appendChild(pc);pResult.appendChild(pb);
@@ -1462,6 +1616,12 @@ function renderEntreno(){
   },C.purple);
   pInner.appendChild(pBtn);
   pCard.appendChild(pInner);gap.appendChild(pCard);
+
+  const guideCard=mkCard(null,{background:C.green+'0d',border:`1px solid ${C.green}33`});
+  guideCard.appendChild(mkLbl('Formato recomendado'));
+  const guide=h('div',{style:{fontSize:'11px',color:C.t1,lineHeight:'1.6',marginTop:'8px'}});
+  guide.innerHTML='Usa siempre <b>CAMPO=VALOR</b>. Las zonas aceptan <b>hh:mm:ss</b>, <b>mm:ss</b> o minutos decimales. Si hay desglose Z1–Z7, la zona dominante se calcula automáticamente.';
+  guideCard.appendChild(guide);gap.appendChild(guideCard);
 
   // Form card
   const fCard=mkCard(null);
@@ -1595,7 +1755,7 @@ function renderEntreno(){
       duration:+(durInp.querySelector('input')?.value||0),
       distance:+(distInp.querySelector('input')?.value||0),
       tss:+(tssInp.querySelector('input')?.value||0),
-      powerAvg:pav,powerNorm:pnv||pav,
+      powerAvg:pav,powerNorm:pnv||pav,powerMax:+(form.powerMax||0),
       hrAvg:+(hrAvgInp.querySelector('input')?.value||0),
       hrMax:+(hrMaxInp.querySelector('input')?.value||0),
       cadence:cadInp?+(cadInp.querySelector('input')?.value||0):0,
